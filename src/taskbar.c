@@ -7,8 +7,12 @@
    the snapshot expire, hiding the widget instead of guessing that space is free. */
 static SRWLOCK lock=SRWLOCK_INIT;
 static struct { HWND bar; RECT bounds; Occupied items[256]; int count,valid; ULONGLONG stamp; } snapshot;
-static LONG started;
 static LONG layout_dirty=1;
+static LONG started;
+static LONG enabled=1;
+static HANDLE wake_event;
+void taskbar_enable(int enable){if(InterlockedExchange(&enabled,enable)!=enable){if(enable)InterlockedExchange(&layout_dirty,1);if(wake_event)SetEvent(wake_event);}}
+
 static HWND event_bar;
 static void CALLBACK layout_event(HWINEVENTHOOK hook,DWORD event,HWND window,LONG object,LONG child,DWORD thread,DWORD time) {
     (void)hook;(void)object;(void)child;(void)thread;(void)time;
@@ -32,11 +36,16 @@ static DWORD WINAPI inspect_taskbar(void *unused) {
     if(FAILED(CoCreateInstance(&CLSID_CUIAutomation,NULL,CLSCTX_INPROC_SERVER,&IID_IUIAutomation,(void**)&uia))){CoUninitialize();return 0;}
     HWINEVENTHOOK hook=NULL;DWORD hook_pid=0;ULONGLONG last_scan=0;int previous_valid=0;
     for(;;){
+        if(!InterlockedCompareExchange(&enabled,0,0)){
+            if(hook){UnhookWinEvent(hook);hook=NULL;hook_pid=0;}
+            AcquireSRWLockExclusive(&lock);snapshot.valid=0;ReleaseSRWLockExclusive(&lock);
+            WaitForSingleObject(wake_event,INFINITE);last_scan=0;continue;
+        }
         MSG message;while(PeekMessageW(&message,NULL,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}
         ULONGLONG observed=GetTickCount64();
         DWORD age=(DWORD)(observed-last_scan),interval=previous_valid?15000:3000;
         if(last_scan && age<interval && (!InterlockedCompareExchange(&layout_dirty,0,0) || age<1000)){
-            MsgWaitForMultipleObjects(0,NULL,FALSE,age<1000?1000-age:interval-age,QS_ALLINPUT);continue;
+            MsgWaitForMultipleObjects(1,&wake_event,FALSE,age<1000?1000-age:interval-age,QS_ALLINPUT);continue;
         }
         InterlockedExchange(&layout_dirty,0);last_scan=observed;
         HWND bar=FindWindowW(L"Shell_TrayWnd",NULL);DWORD pid_now=0;if(bar)GetWindowThreadProcessId(bar,&pid_now);
@@ -71,7 +80,7 @@ static DWORD WINAPI inspect_taskbar(void *unused) {
     }
 }
 int taskbar_space(HWND bar,int left,int right,int width,int preferred,int margin,int *x) {
-    if(InterlockedCompareExchange(&started,1,0)==0){HANDLE thread=CreateThread(NULL,0,inspect_taskbar,NULL,0,NULL);if(thread)CloseHandle(thread);else InterlockedExchange(&started,0);}
+    if(InterlockedCompareExchange(&started,1,0)==0){wake_event=CreateEventW(NULL,FALSE,FALSE,NULL);if(!wake_event){InterlockedExchange(&started,0);return 0;}HANDLE thread=CreateThread(NULL,0,inspect_taskbar,NULL,0,NULL);if(thread)CloseHandle(thread);else {CloseHandle(wake_event);wake_event=NULL;InterlockedExchange(&started,0);}}
     RECT bounds;GetWindowRect(bar,&bounds);Occupied items[256];int count;
     AcquireSRWLockShared(&lock);
     if(!snapshot.valid || snapshot.bar!=bar || !EqualRect(&bounds,&snapshot.bounds) || GetTickCount64()-snapshot.stamp>16500){ReleaseSRWLockShared(&lock);return 0;}

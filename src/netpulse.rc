@@ -2,8 +2,8 @@
 1 RT_MANIFEST "netpulse.manifest"
 1 ICON "netpulse.ico"
 1 VERSIONINFO
-FILEVERSION 1,1,1,0
-PRODUCTVERSION 1,1,1,0
+FILEVERSION 1,2,0,0
+PRODUCTVERSION 1,2,0,0
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -15,7 +15,7 @@ BEGIN
    VALUE "CompanyName", "Avishka Udara\0"
    VALUE "LegalCopyright", "Copyright (C) 2026 Avishka Udara. GPL-3.0-only.\0"
    VALUE "ProductName", "NetPulse\0"
-   VALUE "FileVersion", "1.1.1\0"
+   VALUE "FileVersion", "1.2.0\0"
   END
  END
  BLOCK "VarFileInfo"

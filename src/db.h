@@ -18,5 +18,6 @@ int db_today(Database *db,time_t start,time_t end,uint64_t *down,uint64_t *up);
 int db_reset_today(Database *db,time_t start,time_t end);
 int db_correct(Database *db,time_t stamp,time_t start,time_t end,double peak,double offpeak);
 int db_export(Database *db,const wchar_t *path);
+int db_backup(Database *db,const wchar_t *path);
 void db_close(Database *db);
 #endif

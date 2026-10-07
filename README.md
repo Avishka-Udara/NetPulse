@@ -38,13 +38,13 @@ flowchart LR
 
 ## Install and run
 
-**Version 1.1.1 is an unsigned Windows release candidate.** Windows 10/11 x64 is the current target. macOS/Linux are planned ports, not supported builds.
+**Version 1.2.0 is an unsigned Windows release candidate.** Windows 10/11 x64 is the current target. macOS/Linux are planned ports, not supported builds.
 
 | Package | Purpose |
 | --- | --- |
-| `NetPulse-1.1.1-windows-x64-setup.exe` | Per-user installer, Start menu entry, upgrades and uninstall; no administrator rights required |
+| `NetPulse-1.2.0-windows-x64-setup.exe` | Per-user installer, Start menu entry, upgrades and uninstall; no administrator rights required |
 | `NetPulse-windows-x64.zip` | Portable app; extract before running |
-| `NetPulse-1.1.1-source.zip` | Matching GPL source and build scripts |
+| `NetPulse-1.2.0-source.zip` | Matching GPL source and build scripts |
 | `SHA256SUMS.txt` | Package checksums |
 
 Published binaries belong in [GitHub Releases](https://github.com/Avishka-Udara/NetPulse/releases). A source push does not itself create a release. Successful [CI runs](https://github.com/Avishka-Udara/NetPulse/actions) also produce artifacts.
@@ -72,11 +72,22 @@ Only one instance runs at a time. A normal second launch opens the existing sett
 | Data plan | Typed HH:MM or half-hour presets, allowances, monthly reset day/time |
 | Taskbar | Position preference, fine offset, adapter, Windows startup |
 | Adjust usage | Provider-aligned cycle totals, cycle reset, daily-display reset |
-| Appearance | Windows/light/dark theme, transparent/solid background, width, text size, speeds with or without totals |
+| Appearance | Theme, background, width, text size, display details, and taskbar or tray-only mode |
+| Manage | Export/restore settings, consistent history snapshots, open data folder, retry saving |
 
 Both directions count toward the plan. Units are decimal: 1 GB = 1,000,000,000 bytes. K/M/G mean KB/MB/GB; `/s` identifies speed. Equal peak times mean all-day peak; overnight ranges work, zero allowance means unlimited, and reset days 29-31 clamp to shorter months. Scheduling follows Windows local time and daylight-saving rules.
 
 Peak-hour changes affect future samples; history retains its original classification. Reset-schedule changes recompute the selected cycle. Daily-display resets persist until the next midnight and do not change raw traffic or cycle adjustments. Ctrl-drag fine-tunes widget offset, subject to detected free space. Larger text can increase minimum width.
+
+## Tracking, backup, and lower-overhead mode
+
+Choose **Appearance > Run mode > Tray only**, then Save settings to stop embedded-widget work. A fresh tray-only launch does not initialize UI Automation; switching during a session pauses its worker and removes the widget. Network sampling and usage storage continue. Switching back resumes placement. Previously loaded system libraries can remain in memory until restart.
+
+**Overview > Tracking details** shows the session start, monitored interface names, and whether today's display was reset. **Manage** exports saved settings or restores plan/appearance preferences; startup registration and traffic history remain unchanged. Missing/invalid imported fields use safe defaults; an unrecognized backup is rejected. Save or discard pending changes before backup/restore.
+
+History snapshots use SQLite's backup API, including committed WAL data, and atomically replace the destination after a successful backup. For recovery, exit NetPulse first, preserve the old data folder, then restore a known-good database. Do not replace or delete a live database. Retry saving after fixing space/permission problems. There is no destructive automatic repair.
+
+Mouse clicks suppress decorative focus boxes; keyboard navigation retains focus indicators. Unsaved changes are indicated and closing offers a discard confirmation. Validation feedback appears in the settings footer.
 
 ## Accuracy and compatibility limits
 
@@ -128,3 +139,9 @@ The build runs core, database, network, settings, and placement tests. The separ
 See [CONTRIBUTING.md](CONTRIBUTING.md), [RELEASE.md](RELEASE.md), and the [macOS/Linux roadmap](ROADMAP.md). Include Windows version, display scaling, reproduction steps, and expected behavior in issues. Do not upload usage databases or credentials.
 
 NetPulse is **GPL-3.0-only**. Distribute matching source with binaries and preserve [third-party notices](THIRD_PARTY_NOTICES.md). SQLite is public domain; runtime notices are included separately.
+
+## Release automation and extended checks
+
+Pushing a tag matching the installer version (for example `v1.2.0`) runs tests and creates a **draft** GitHub release with installer, portable ZIP, corresponding source, checksums, and generated notes. It does not publish automatically or provide code signing. Review [QA.md](QA.md) before publishing.
+
+For longer measurements, run `tools/measure-resources.ps1 -ProcessId <id> -Minutes 60 -OutputPath samples.csv`. The script only observes the selected NetPulse process. User-reported memory below 10 MB is plausible for a different memory metric/environment; it is not presented as a universal guarantee.

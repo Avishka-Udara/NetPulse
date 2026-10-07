@@ -6,7 +6,7 @@ typedef struct {
     int peak_start, peak_end, reset_day, reset_minute;
     double peak_gb, offpeak_gb;
     int position, offset;
-    int widget_width, font_size, theme, transparent, show_totals;
+    int widget_width, font_size, theme, transparent, show_totals, tray_only;
     uint64_t adapter;
 } Config;
 typedef struct { uint64_t down[2], up[2]; } Usage;

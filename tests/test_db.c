@@ -2,6 +2,7 @@
 #include "db.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 int main(void) {
     Database d;Usage u={0},got;assert(db_open(&d,L":memory:"));
     u.down[0]=100;u.up[0]=25;u.down[1]=50;u.up[1]=10;
@@ -22,6 +23,15 @@ int main(void) {
     assert(db_traffic(&d,240,300,&down,&up));assert(down==150 && up==35);
     assert(db_add(&d,300,&u));assert(db_traffic(&d,300,360,&down,&up));assert(down==150 && up==35);
     assert(db_traffic(&d,360,420,&down,&up));assert(down==0 && up==0);
+    assert(db_flush(&d,1050));
+    wchar_t backup[MAX_PATH];assert(GetTempFileNameW(L"build",L"npb",0,backup));
+    assert(db_backup(&d,backup));Database copy;assert(db_open(&copy,backup));
+    assert(db_traffic(&copy,120,240,&down,&up));assert(down==450 && up==105);
+    sqlite3_stmt *check=NULL;assert(sqlite3_prepare_v2(copy.handle,"PRAGMA integrity_check",-1,&check,NULL)==SQLITE_OK);assert(sqlite3_step(check)==SQLITE_ROW);assert(strcmp((const char*)sqlite3_column_text(check,0),"ok")==0);sqlite3_finalize(check);
+    db_close(&copy);
+    HANDLE locked=CreateFileW(backup,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);assert(locked!=INVALID_HANDLE_VALUE);
+    assert(!db_backup(&d,backup));CloseHandle(locked);assert(db_open(&copy,backup));assert(db_traffic(&copy,120,240,&down,&up));assert(down==450 && up==105);db_close(&copy);
+    assert(DeleteFileW(backup));
     db_close(&d);
     /* Exact known transfers survive flush/restart, exclude yesterday, and are
        unaffected by provider quota corrections. No real user database is used. */

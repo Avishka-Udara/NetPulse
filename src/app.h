@@ -18,6 +18,8 @@ typedef struct {
 extern App app;
 int startup_enabled(void);
 int startup_set(int enable);
+int settings_export(const wchar_t *path);
+int settings_import(const wchar_t *path,Config *out);
 int settings_load(void);
 int settings_save(const Config *c);
 void app_sample(void);

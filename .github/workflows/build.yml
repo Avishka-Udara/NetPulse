@@ -29,8 +29,8 @@ jobs:
           name: NetPulse-windows-x64
           path: |
             dist/NetPulse-windows-x64.zip
-            dist/NetPulse-1.1.1-source.zip
-            dist/NetPulse-1.1.1-windows-x64-setup.exe
+            dist/NetPulse-1.2.0-source.zip
+            dist/NetPulse-1.2.0-windows-x64-setup.exe
             dist/SHA256SUMS.txt
   portable-core:
     runs-on: ubuntu-latest

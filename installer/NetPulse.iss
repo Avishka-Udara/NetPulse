@@ -1,4 +1,4 @@
-#define AppVersion "1.1.1"
+#define AppVersion "1.2.0"
 [Setup]
 AppId=NetPulse.AvishkaUdara
 AppName=NetPulse

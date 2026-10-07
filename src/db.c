@@ -2,6 +2,7 @@
 #include "db.h"
 #include <stdio.h>
 #include <string.h>
+#include <wchar.h>
 static int failed(Database *d) { snprintf(d->error,sizeof(d->error),"%s",sqlite3_errmsg(d->handle));return 0; }
 static int sql(Database *d,const char *s) { return sqlite3_exec(d->handle,s,NULL,NULL,NULL)==SQLITE_OK ? 1:failed(d); }
 int db_open(Database *d,const wchar_t *path) {
@@ -104,5 +105,20 @@ int db_export(Database *d,const wchar_t *path) {
     }
     ok=rc==SQLITE_DONE && !ferror(f);
 done: sqlite3_finalize(s);if(fclose(f)!=0)ok=0;if(!ok)snprintf(d->error,sizeof(d->error),"CSV export failed.");return ok;
+}
+int db_backup(Database *d,const wchar_t *path) {
+    wchar_t directory[MAX_PATH],temporary[MAX_PATH];
+    if(wcslen(path)>=MAX_PATH){snprintf(d->error,sizeof(d->error),"Backup path is too long.");return 0;}
+    wcscpy(directory,path);wchar_t *slash=wcsrchr(directory,L'\\');wchar_t *forward=wcsrchr(directory,L'/');if(forward && (!slash || forward>slash))slash=forward;
+    if(slash)slash[1]=0;else wcscpy(directory,L".");
+    if(!GetTempFileNameW(directory,L"npb",0,temporary)){snprintf(d->error,sizeof(d->error),"Cannot create backup temporary file.");return 0;}
+    sqlite3 *target=NULL;
+    if(sqlite3_open16(temporary,&target)!=SQLITE_OK){if(target)sqlite3_close(target);DeleteFileW(temporary);snprintf(d->error,sizeof(d->error),"Cannot open backup destination.");return 0;}
+    sqlite3_backup *backup=sqlite3_backup_init(target,"main",d->handle,"main");
+    int rc=backup?sqlite3_backup_step(backup,-1):SQLITE_ERROR;
+    int finish=backup?sqlite3_backup_finish(backup):SQLITE_ERROR;
+    int close=sqlite3_close(target);
+    if(rc!=SQLITE_DONE || finish!=SQLITE_OK || close!=SQLITE_OK || !MoveFileExW(temporary,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){DeleteFileW(temporary);snprintf(d->error,sizeof(d->error),"Database backup failed; choose another location.");return 0;}
+    return 1;
 }
 void db_close(Database *d){if(d->handle)sqlite3_close(d->handle);d->handle=NULL;}

@@ -10,3 +10,5 @@
 Maintainer: [Avishka Udara](https://github.com/avishka-Udara).
 
 An installer and passing unit tests do not establish production readiness. Outstanding manual checks and performance measurements must remain visible in VALIDATION.md.
+
+Version tags matching installer/NetPulse.iss trigger `.github/workflows/release.yml`, which creates a draft with generated notes and matching binary/source assets. Review QA.md before publishing. The workflow does not sign binaries.

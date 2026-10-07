@@ -1,0 +1,41 @@
+name: Draft versioned release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches source version
+        shell: pwsh
+        run: |
+          $source = Get-Content installer/NetPulse.iss -Raw
+          $version = [regex]::Match($source, '#define AppVersion "([^"]+)"').Groups[1].Value
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match installer version' }
+      - name: Build and test
+        shell: cmd
+        run: build.bat
+      - name: Integration checks
+        shell: pwsh
+        run: |
+          ./build/test_startup.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tests/test_sql.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package matching binaries and source
+        shell: pwsh
+        run: ./tools/package.ps1 -Iscc "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
+      - name: Create draft for maintainer review
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = @(Get-ChildItem dist -File | Where-Object { $_.Extension -in '.zip','.exe' -or $_.Name -eq 'SHA256SUMS.txt' } | ForEach-Object FullName)
+          gh release create $env:GITHUB_REF_NAME --verify-tag --draft --generate-notes --title "NetPulse $env:GITHUB_REF_NAME" @assets
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

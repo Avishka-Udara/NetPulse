@@ -27,6 +27,7 @@ int settings_load(void) {
     c->font_size=GetPrivateProfileIntW(L"widget",L"font_size",11,app.ini);if(c->font_size<10 || c->font_size>16)c->font_size=11;
     c->theme=GetPrivateProfileIntW(L"widget",L"theme",0,app.ini);if(c->theme<0 || c->theme>2)c->theme=0;
     c->transparent=GetPrivateProfileIntW(L"widget",L"transparent",1,app.ini)!=0;
+    c->tray_only=GetPrivateProfileIntW(L"widget",L"tray_only",0,app.ini)!=0;
     c->show_totals=GetPrivateProfileIntW(L"widget",L"show_totals",1,app.ini)!=0;
     wchar_t b[64],*end;read_text(L"network",L"adapter",L"0",b,64);c->adapter=_wcstoui64(b,&end,10);if(*end)c->adapter=0;
     return 1;
@@ -34,9 +35,22 @@ int settings_load(void) {
 int settings_save(const Config *c) {
     wchar_t temp[MAX_PATH];swprintf(temp,MAX_PATH,L"%ls.tmp",app.ini);
     FILE *f=_wfopen(temp,L"wb");if(!f)return 0;
-    int n=fprintf(f,"[plan]\r\npeak_start=%02d:%02d\r\npeak_end=%02d:%02d\r\npeak_gb=%.9g\r\noffpeak_gb=%.9g\r\nreset_day=%d\r\nreset_time=%02d:%02d\r\n[widget]\r\nposition=%d\r\noffset=%d\r\nwidth=%d\r\nfont_size=%d\r\ntheme=%d\r\ntransparent=%d\r\nshow_totals=%d\r\n[network]\r\nadapter=%llu\r\n",
-        c->peak_start/60,c->peak_start%60,c->peak_end/60,c->peak_end%60,c->peak_gb,c->offpeak_gb,c->reset_day,c->reset_minute/60,c->reset_minute%60,c->position,c->offset,c->widget_width,c->font_size,c->theme,c->transparent,c->show_totals,(unsigned long long)c->adapter);
+    int n=fprintf(f,"[plan]\r\npeak_start=%02d:%02d\r\npeak_end=%02d:%02d\r\npeak_gb=%.9g\r\noffpeak_gb=%.9g\r\nreset_day=%d\r\nreset_time=%02d:%02d\r\n[widget]\r\nposition=%d\r\noffset=%d\r\nwidth=%d\r\nfont_size=%d\r\ntheme=%d\r\ntransparent=%d\r\nshow_totals=%d\r\ntray_only=%d\r\n[network]\r\nadapter=%llu\r\n",
+        c->peak_start/60,c->peak_start%60,c->peak_end/60,c->peak_end%60,c->peak_gb,c->offpeak_gb,c->reset_day,c->reset_minute/60,c->reset_minute%60,c->position,c->offset,c->widget_width,c->font_size,c->theme,c->transparent,c->show_totals,c->tray_only,(unsigned long long)c->adapter);
     int ok=n>0;if(fclose(f)!=0)ok=0;
     if(ok)ok=MoveFileExW(temp,app.ini,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
     if(!ok)DeleteFileW(temp);return ok;
+}
+
+int settings_export(const wchar_t *path) {
+    wchar_t original[MAX_PATH];wcscpy(original,app.ini);wcscpy(app.ini,path);
+    int ok=settings_save(&app.config);wcscpy(app.ini,original);return ok;
+}
+int settings_import(const wchar_t *path,Config *out) {
+    wchar_t value[32];
+    GetPrivateProfileStringW(L"plan",L"peak_start",L"",value,32,path);
+    char clock[32];WideCharToMultiByte(CP_UTF8,0,value,-1,clock,32,NULL,NULL);int minute;
+    if(!parse_clock(clock,&minute))return 0;
+    wchar_t original[MAX_PATH];wcscpy(original,app.ini);Config saved=app.config;
+    wcscpy(app.ini,path);settings_load();*out=app.config;app.config=saved;wcscpy(app.ini,original);return 1;
 }

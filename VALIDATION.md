@@ -209,3 +209,16 @@ Installer smoke test: Inno Setup 6.7.3 compiled successfully. Clean per-user ins
 - Same-session 30-second baseline: 0.365% of one CPU core, 22.12 MiB working set, 3.36 MiB private memory. First optimization sample was 0.469%, 22.57 MiB, 3.72 MiB: no improvement demonstrated in that sample. Final reduced-scan measurement follows below. Short samples are noisy and do not establish sustained savings.
 
 Final 1.1.1 reduced-scan sample: 0.364% of one CPU core, 22.36 MiB working set, 3.34 MiB private memory over 30.0 seconds. CPU was effectively unchanged from the same-session baseline; fewer scheduled scans and allocations are established by implementation, not a proven sustained CPU/RAM reduction.
+
+
+## 1.2.0 - 2026-10-08
+
+- User reports successful manual tests and memory below 10 MB in their environment. This is user-reported, with metric and duration unspecified, not a replacement for measured working-set/private-memory samples.
+- New tray-only run mode persists in INI and suppresses widget creation/scanner startup. Existing workers are paused with their Explorer event hook removed and resume when enabled.
+- Settings export/import round-trip and invalid-import rejection pass; active settings remain unchanged during parsing. Imports explicitly normalize missing/invalid fields to defaults and leave Windows startup registration/history unchanged.
+- SQLite snapshot backup reopens with identical traffic and passes integrity_check. A locked destination causes failure without replacing the existing valid backup.
+- Unsaved feedback, inline validation, tracking details, Manage page, keyboard-aware focus painting, resource measurement script, QA acceptance checklist and tag-triggered draft release workflow added.
+- Native suites, isolated startup integration and SQL tests pass. Draft-release workflow awaits execution on a matching version tag; no public release or signing is claimed.
+
+- Fresh tray-only measurement: 30.0 seconds, 0.208% of one CPU core, 12.29 MiB working set, 1.83 MiB private memory, one thread, UI Automation not loaded. Short Windows 11 smoke sample; not a sustained resource guarantee.
+- Manage and Appearance layouts visually checked. Mouse dropdown selection has no dotted focus box; Tab navigation restores visible focus. Unsaved feedback appears, saving changes persists tray_only=0, and the placement worker starts (10 process threads observed). Crowded-taskbar fallback reports why the widget is hidden.

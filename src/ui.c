@@ -10,11 +10,11 @@
 #include <stdlib.h>
 #include <math.h>
 #include <wchar.h>
-enum { ID_START=101,ID_END,ID_PEAK,ID_OFF,ID_DAY,ID_TIME,ID_POSITION,ID_OFFSET,ID_ADAPTER,ID_SAVE,ID_EXPORT,ID_CORRECT_PEAK,ID_CORRECT_OFF,ID_CORRECT,ID_RESET,ID_CLOSE,ID_RESET_TODAY,ID_WIDTH,ID_FONT,ID_THEME,ID_BACKGROUND,ID_TOTALS,ID_STARTUP,ID_ABOUT };
+enum { ID_START=101,ID_END,ID_PEAK,ID_OFF,ID_DAY,ID_TIME,ID_POSITION,ID_OFFSET,ID_ADAPTER,ID_SAVE,ID_EXPORT,ID_CORRECT_PEAK,ID_CORRECT_OFF,ID_CORRECT,ID_RESET,ID_CLOSE,ID_RESET_TODAY,ID_WIDTH,ID_FONT,ID_THEME,ID_BACKGROUND,ID_TOTALS,ID_STARTUP,ID_ABOUT,ID_MODE,ID_BACKUP_SETTINGS,ID_RESTORE_SETTINGS,ID_BACKUP_DATA,ID_DATA_FOLDER,ID_RETRY,ID_TRACKING };
 static AdapterChoice choices[MAX_ADAPTERS];static unsigned choice_count;
 static int scale=96,dragging,drag_origin,drag_offset;
 static int px(int n){return MulDiv(n,scale,96);}
-static int page=0,creating_page=0;
+static int page=0,creating_page=0,settings_dirty,loading_fields;
 static HWND page_controls[96];static int control_pages[96],control_count;
 static HFONT heading_font,value_font;
 static COLORREF surface,border;
@@ -38,7 +38,7 @@ static ULONGLONG menu_closed;
 static void show_page(HWND w,int selected) {
     page=selected;
     for(int i=0;i<control_count;i++)ShowWindow(page_controls[i],control_pages[i]==page || control_pages[i]==-1 || (control_pages[i]==-2 && (page==1 || page==2 || page==4))?SW_SHOW:SW_HIDE);
-    for(int i=200;i<=204;i++)InvalidateRect(GetDlgItem(w,i),NULL,TRUE);
+    for(int i=200;i<=205;i++)InvalidateRect(GetDlgItem(w,i),NULL,TRUE);
     InvalidateRect(w,NULL,TRUE);
 }
 static void amount(wchar_t *b,size_t n,uint64_t bytes) {
@@ -87,6 +87,8 @@ void ui_tray(int add) {
     if(Shell_NotifyIconW(add?NIM_ADD:NIM_MODIFY,&n))wcscpy(previous_tip,n.szTip);
 }
 void ui_attach(void) {
+    taskbar_enable(!app.config.tray_only);
+    if(app.config.tray_only){if(IsWindow(app.widget))DestroyWindow(app.widget);widget_hidden=0;app.attached=1;return;}
     HWND bar=FindWindowW(L"Shell_TrayWnd",NULL);
     if(!bar){app.attached=0;return;}
     if(!IsWindow(app.widget) || app.taskbar!=bar) {
@@ -185,7 +187,7 @@ static LRESULT CALLBACK combo_proc(HWND w,UINT m,WPARAM wp,LPARAM lp,UINT_PTR id
             HDC dc=GetDC(w);RECT r;GetClientRect(w,&r);HBRUSH b=CreateSolidBrush(surface);
             int saved=SaveDC(dc);ExcludeClipRect(dc,info.rcItem.left,info.rcItem.top,info.rcItem.right,info.rcItem.bottom);FillRect(dc,&r,b);RestoreDC(dc,saved);
             FillRect(dc,&info.rcButton,b);DeleteObject(b);
-            b=CreateSolidBrush(GetFocus()==w || IsChild(w,GetFocus())?app.accent:surface);FrameRect(dc,&r,b);DeleteObject(b);
+            b=CreateSolidBrush(((GetFocus()==w || IsChild(w,GetFocus())) && !(SendMessageW(GetParent(w),WM_QUERYUISTATE,0,0)&UISF_HIDEFOCUS))?app.accent:surface);FrameRect(dc,&r,b);DeleteObject(b);
             int x=(info.rcButton.left+info.rcButton.right)/2,y=(info.rcButton.top+info.rcButton.bottom)/2;
             HPEN pen=CreatePen(PS_SOLID,px(1),app.fg);HGDIOBJ old=SelectObject(dc,pen);
             MoveToEx(dc,x-px(3),y-px(1),NULL);LineTo(dc,x,y+px(2));LineTo(dc,x+px(4),y-px(2));SelectObject(dc,old);DeleteObject(pen);ReleaseDC(w,dc);
@@ -216,9 +218,9 @@ static int get_clock(HWND w,int id,int *out) {
     wchar_t b[32];char a[64];GetDlgItemTextW(w,id,b,32);WideCharToMultiByte(CP_UTF8,0,b,-1,a,64,NULL,NULL);return parse_clock(a,out);
 }
 static void settings_fields(HWND w) {
-    control_count=0;creating_page=-1;
-    const wchar_t *tabs[]={L"Overview",L"Data plan",L"Taskbar",L"Adjust usage",L"Appearance"};
-    for(int i=0;i<5;i++)control(w,L"BUTTON",tabs[i],200+i,24+i*128,82,120,36,WS_TABSTOP);
+    loading_fields=1;control_count=0;creating_page=-1;
+    const wchar_t *tabs[]={L"Overview",L"Data plan",L"Taskbar",L"Adjust usage",L"Appearance",L"Manage"};
+    for(int i=0;i<6;i++)control(w,L"BUTTON",tabs[i],200+i,24+i*106,82,100,36,WS_TABSTOP);
     control(w,L"BUTTON",L"Help and about",ID_ABOUT,620,24,36,32,WS_TABSTOP);
     control(w,L"BUTTON",L"Close",ID_CLOSE,544,550,112,36,WS_TABSTOP);
     creating_page=1;
@@ -260,7 +262,20 @@ static void settings_fields(HWND w) {
     label(w,L"Display",32,374,270);
     combo=control(w,L"COMBOBOX",L"",ID_TOTALS,32,404,608,160,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
     SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Live speeds only");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Live speeds and today's totals");SendMessageW(combo,CB_SETCURSEL,app.config.show_totals,0);
-    label(w,L"Width grows when needed to fit larger text. All sizes use logical pixels.",32,464,620);
+    label(w,L"Run mode",32,472,260);
+    combo=control(w,L"COMBOBOX",L"",ID_MODE,360,464,280,130,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
+    SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Taskbar widget + tray");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Tray only (lower overhead)");SendMessageW(combo,CB_SETCURSEL,app.config.tray_only,0);
+    creating_page=5;
+    label(w,L"Settings backup",32,218,600);
+    control(w,L"BUTTON",L"Export settings...",ID_BACKUP_SETTINGS,32,252,190,36,WS_TABSTOP);
+    control(w,L"BUTTON",L"Restore settings...",ID_RESTORE_SETTINGS,238,252,190,36,WS_TABSTOP);
+    label(w,L"Includes plan and appearance. Windows startup remains unchanged.",32,306,620);
+    label(w,L"Usage database",32,354,600);
+    control(w,L"BUTTON",L"Back up history...",ID_BACKUP_DATA,32,388,190,36,WS_TABSTOP);
+    control(w,L"BUTTON",L"Open data folder",ID_DATA_FOLDER,238,388,190,36,WS_TABSTOP);
+    control(w,L"BUTTON",L"Retry saving",ID_RETRY,444,388,180,36,WS_TABSTOP);
+    label(w,L"Backup uses SQLite's snapshot API, including committed WAL data.",32,442,620);
+    label(w,L"For recovery, exit NetPulse before replacing the database from a backup.",32,470,620);
     creating_page=3;
     label(w,L"Peak used (GB)",32,238,280);edit(w,ID_CORRECT_PEAK,L"0",40,268,264);
     label(w,L"Off-peak used (GB)",360,238,280);edit(w,ID_CORRECT_OFF,L"0",368,268,264);
@@ -271,12 +286,14 @@ static void settings_fields(HWND w) {
     label(w,L"Resets the daily display; preserves history and your billing cycle.",32,494,620);
     creating_page=0;
     control(w,L"BUTTON",L"Export history...",ID_EXPORT,24,550,160,36,WS_TABSTOP);
+    control(w,L"BUTTON",L"Tracking details",ID_TRACKING,200,550,160,36,WS_TABSTOP);
     creating_page=-2;
     control(w,L"BUTTON",L"Save settings",ID_SAVE,380,550,148,36,WS_TABSTOP);
     set_clock(w,ID_START,app.config.peak_start);set_clock(w,ID_END,app.config.peak_end);set_clock(w,ID_TIME,app.config.reset_minute);
     set_number(w,ID_PEAK,app.config.peak_gb);set_number(w,ID_OFF,app.config.offpeak_gb);set_number(w,ID_DAY,app.config.reset_day);
     set_number(w,ID_OFFSET,app.config.offset);SendDlgItemMessageW(w,ID_POSITION,CB_SETCURSEL,(WPARAM)app.config.position,0);
     set_number(w,ID_CORRECT_PEAK,(app.usage.down[0]+app.usage.up[0])/1e9);set_number(w,ID_CORRECT_OFF,(app.usage.down[1]+app.usage.up[1])/1e9);
+    loading_fields=0;settings_dirty=0;
 }
 static void panel(HDC dc,int x,int y,int width,int height) {
     HGDIOBJ oldBrush=SelectObject(dc,surface_brush);HPEN pen=CreatePen(PS_NULL,0,surface);HGDIOBJ oldPen=SelectObject(dc,pen);
@@ -290,8 +307,8 @@ static void summary(HWND w,HDC dc) {
     text_at(dc,L"NetPulse",24,22,400,app.fg);SelectObject(dc,app.font);
     text_at(dc,L"Network activity, at a glance",24,51,440,app.muted);
     
-    const wchar_t *titles[]={L"Today's activity",L"Your data plan",L"Taskbar",L"Usage adjustments",L"Appearance"};
-    const wchar_t *descriptions[]={L"Recorded today, or since your last daily reset",L"Flexible allowances, on your schedule",L"Widget placement and the connection to monitor",L"Enter your provider's current-cycle usage",L"Customize the widget without changing your usage"};
+    const wchar_t *titles[]={L"Today's activity",L"Your data plan",L"Taskbar",L"Usage adjustments",L"Appearance",L"Backup and recovery"};
+    const wchar_t *descriptions[]={L"Recorded today, or since your last daily reset",L"Flexible allowances, on your schedule",L"Widget placement and the connection to monitor",L"Enter your provider's current-cycle usage",L"Customize the widget without changing your usage",L"Keep a portable copy of your settings and history"};
     SelectObject(dc,heading_font);text_at(dc,titles[page],24,142,630,app.fg);SelectObject(dc,app.font);text_at(dc,descriptions[page],24,174,630,app.muted);
     wchar_t b[256],value[48],live[48];
     if(page==0) {
@@ -318,17 +335,18 @@ static void summary(HWND w,HDC dc) {
         if(page==4){panel(dc,32,314,280,42);panel(dc,360,314,280,42);}
         if(page==3){panel(dc,32,262,280,42);panel(dc,360,262,280,42);}
     }
-    const wchar_t *status=app.status[0]?app.status:L"Both directions count. Daily totals exclude plan adjustments.";
+    const wchar_t *status=app.status[0]?app.status:settings_dirty?L"Unsaved changes - choose Save settings to apply them.":L"Both directions count. Daily totals exclude plan adjustments.";
     if(!app.storage_ok){MultiByteToWideChar(CP_UTF8,0,app.db.error,-1,b,256);status=b;}
-    else if(!app.attached)status=L"Taskbar unavailable. Use the tray icon to open NetPulse.";
-    else if(widget_hidden)status=L"Widget hidden: no verified free space. Tracking continues in the tray.";
-    else if(!app.network_ok)status=L"Network counters unavailable. Retrying...";
-    else if(!app.network.active_count)status=L"No active adapter. Check your connection or adapter selection.";
+    else if(!app.status[0] && !settings_dirty && !app.attached)status=L"Taskbar unavailable. Use the tray icon to open NetPulse.";
+    else if(!app.status[0] && !settings_dirty && app.config.tray_only)status=L"Tray-only mode. Taskbar scanning is paused; traffic tracking continues.";
+    else if(!app.status[0] && !settings_dirty && widget_hidden)status=L"Widget hidden: no verified free space. Tracking continues in the tray.";
+    else if(!app.status[0] && !settings_dirty && !app.network_ok)status=L"Network counters unavailable. Retrying...";
+    else if(!app.status[0] && !settings_dirty && !app.network.active_count)status=L"No active adapter. Check your connection or adapter selection.";
     text_at(dc,status,24,610,632,app.storage_ok?app.muted:RGB(230,120,90));SelectObject(dc,old);
 }
 static void draw_button(DRAWITEMSTRUCT *item) {
     FillRect(item->hDC,&item->rcItem,app.background);
-    int id=(int)item->CtlID,nav=id>=200 && id<=204,active=nav && page==id-200;
+    int id=(int)item->CtlID,nav=id>=200 && id<=205,active=nav && page==id-200;
     int primary=id==ID_SAVE;
     COLORREF fill=primary?app.accent:((active || !nav)?surface:app.bg);
     if(item->itemState&ODS_SELECTED)fill=surface;
@@ -339,20 +357,31 @@ static void draw_button(DRAWITEMSTRUCT *item) {
     SetTextColor(item->hDC,primary?(app.dark?RGB(15,23,42):RGB(255,255,255)):(active?app.fg:(nav?app.muted:app.fg)));
     DrawTextW(item->hDC,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
     if(active){RECT underline={r.left+px(22),r.bottom-px(2),r.right-px(22),r.bottom};HBRUSH line=CreateSolidBrush(app.accent);FillRect(item->hDC,&underline,line);DeleteObject(line);}
-    if(item->itemState&ODS_FOCUS){InflateRect(&r,-4,-4);DrawFocusRect(item->hDC,&r);}
+    if((item->itemState&ODS_FOCUS) && !(item->itemState&ODS_NOFOCUSRECT) && !(SendMessageW(GetParent(item->hwndItem),WM_QUERYUISTATE,0,0)&UISF_HIDEFOCUS)){InflateRect(&r,-4,-4);DrawFocusRect(item->hDC,&r);}
     SelectObject(item->hDC,of);SelectObject(item->hDC,op);SelectObject(item->hDC,ob);DeleteObject(pen);DeleteObject(brush);
+}
+static void validation_error(HWND w,int control_id,const wchar_t *message) {
+    wcsncpy(app.status,message,255);app.status[255]=0;
+    HWND field=GetDlgItem(w,control_id);for(int i=0;i<control_count;i++)if(page_controls[i]==field && control_pages[i]>=0){show_page(w,control_pages[i]);break;}SetFocus(field);
+    SendMessageW(w,WM_CHANGEUISTATE,MAKEWPARAM(UIS_CLEAR,UISF_HIDEFOCUS),0);
+    RECT footer={0,px(604),px(680),px(650)};InvalidateRect(w,&footer,FALSE);
 }
 static void save_settings(HWND w) {
     Config c=app.config;double day,offset,width,font;
-    if(!get_number(w,ID_WIDTH,136,320,&width)||floor(width)!=width||!get_number(w,ID_FONT,10,16,&font)||floor(font)!=font){app_error(w,L"Use a whole widget width from 136 to 320 and text size from 10 to 16.");return;}
+    if(!get_number(w,ID_WIDTH,136,320,&width)||floor(width)!=width){validation_error(w,ID_WIDTH,L"Width must be a whole number from 136 to 320.");return;}
+    if(!get_number(w,ID_FONT,10,16,&font)||floor(font)!=font){validation_error(w,ID_FONT,L"Text size must be a whole number from 10 to 16.");return;}
     c.widget_width=(int)width;c.font_size=(int)font;
     c.theme=(int)SendDlgItemMessageW(w,ID_THEME,CB_GETCURSEL,0,0);
     c.transparent=(int)SendDlgItemMessageW(w,ID_BACKGROUND,CB_GETCURSEL,0,0);
+    c.tray_only=(int)SendDlgItemMessageW(w,ID_MODE,CB_GETCURSEL,0,0);
     c.show_totals=(int)SendDlgItemMessageW(w,ID_TOTALS,CB_GETCURSEL,0,0);
-    if(!get_clock(w,ID_START,&c.peak_start)||!get_clock(w,ID_END,&c.peak_end)||!get_clock(w,ID_TIME,&c.reset_minute)){
-        app_error(w,L"Enter times as HH:MM, from 00:00 to 23:59. Equal peak times mean all-day peak.");return;}
-    if(!get_number(w,ID_PEAK,0,1000000,&c.peak_gb)||!get_number(w,ID_OFF,0,1000000,&c.offpeak_gb)||!get_number(w,ID_DAY,1,31,&day)||floor(day)!=day||!get_number(w,ID_OFFSET,-5000,5000,&offset)||floor(offset)!=offset){
-        app_error(w,L"Enter non-negative caps, a whole reset day (1-31), and a whole offset (-5000 to 5000).");return;}
+    if(!get_clock(w,ID_START,&c.peak_start)){validation_error(w,ID_START,L"Peak start: use HH:MM between 00:00 and 23:59.");return;}
+    if(!get_clock(w,ID_END,&c.peak_end)){validation_error(w,ID_END,L"Peak end: use HH:MM between 00:00 and 23:59.");return;}
+    if(!get_clock(w,ID_TIME,&c.reset_minute)){validation_error(w,ID_TIME,L"Reset time: use HH:MM between 00:00 and 23:59.");return;}
+    if(!get_number(w,ID_PEAK,0,1000000,&c.peak_gb)){validation_error(w,ID_PEAK,L"Peak allowance must be between 0 and 1,000,000 GB.");return;}
+    if(!get_number(w,ID_OFF,0,1000000,&c.offpeak_gb)){validation_error(w,ID_OFF,L"Off-peak allowance must be between 0 and 1,000,000 GB.");return;}
+    if(!get_number(w,ID_DAY,1,31,&day)||floor(day)!=day){validation_error(w,ID_DAY,L"Reset day must be a whole number from 1 to 31.");return;}
+    if(!get_number(w,ID_OFFSET,-5000,5000,&offset)||floor(offset)!=offset){validation_error(w,ID_OFFSET,L"Offset must be a whole number from -5000 to 5000.");return;}
     c.reset_day=(int)day;c.offset=(int)offset;c.position=(int)SendDlgItemMessageW(w,ID_POSITION,CB_GETCURSEL,0,0);
     int a=(int)SendDlgItemMessageW(w,ID_ADAPTER,CB_GETCURSEL,0,0);c.adapter=a>0 && a<=(int)choice_count?choices[a-1].luid:0;
     app_sample();if(!app_flush()){app_error(w,L"Could not save pending usage. Settings have not been changed.");return;}
@@ -364,7 +393,7 @@ static void save_settings(HWND w) {
     }
     int changed=c.adapter!=app.config.adapter;app.config=c;if(changed)app.network.valid=0;
     app_refresh_usage();ui_theme();ui_attach();InvalidateRect(w,NULL,FALSE);
-    SetWindowTextW(w,L"NetPulse - settings saved");wcscpy(app.status,L"Settings saved.");
+    SetWindowTextW(w,L"NetPulse - settings saved");wcscpy(app.status,L"Settings saved.");settings_dirty=0;
 }
 static void correct_usage(HWND w,int reset) {
     double peak=0,off=0;
@@ -380,6 +409,40 @@ static void export_usage(HWND w) {
     app_sample();if(!app_flush() || !db_export(&app.db,path)){app_error(w,L"Could not export usage. Check disk space and destination permissions.");return;}
     SetWindowTextW(w,L"NetPulse - usage exported");
 }
+static void tracking_details(HWND w) {
+    wchar_t text[1800],date[64];struct tm local=*localtime(&app.db.session);wcsftime(date,64,L"%d %b %Y, %H:%M",&local);
+    swprintf(text,1800,L"Current session started: %ls\nSampling: every second\nMode: %ls\n\nMonitored interfaces:\n",date,app.config.tray_only?L"Tray only":L"Taskbar and tray");
+    AdapterChoice available[MAX_ADAPTERS];unsigned count=network_choices(available,MAX_ADAPTERS);
+    for(unsigned i=0;i<app.network.count;i++)for(unsigned j=0;j<count;j++)if(app.network.previous[i].luid==available[j].luid){
+        size_t used=wcslen(text);if(used+ wcslen(available[j].name)+4<1400){wcscat(text,available[j].name);wcscat(text,L"\n");}break;
+    }
+    if(!app.network.count)wcscat(text,L"No matching interface currently available.\n");
+    sqlite3_stmt *stmt=NULL;int reset=0;
+    if(sqlite3_prepare_v2(app.db.handle,"SELECT 1 FROM daily_resets WHERE day=?",-1,&stmt,NULL)==SQLITE_OK){sqlite3_bind_int64(stmt,1,app.day_start);reset=sqlite3_step(stmt)==SQLITE_ROW;}sqlite3_finalize(stmt);
+    wcscat(text,reset?L"\nToday's display was reset manually.":L"\nToday's display includes recorded traffic since midnight.");
+    wcscat(text,L"\n\nAdapter traffic includes local transfers and protocol overhead. Your provider may count differently. Traffic while NetPulse is closed is not recorded.");
+    MessageBoxW(w,text,L"Tracking details",MB_OK|MB_ICONINFORMATION);
+}
+static void manage_file(HWND w,int action) {
+    if(settings_dirty){app_error(w,L"Save or discard your pending settings before backing up or restoring.");return;}
+    int restoring=action==ID_RESTORE_SETTINGS,history=action==ID_BACKUP_DATA;
+    wchar_t path[MAX_PATH];wcscpy(path,history?L"NetPulse-history.db":L"NetPulse-settings.ini");
+    OPENFILENAMEW o={0};o.lStructSize=sizeof(o);o.hwndOwner=w;o.lpstrFile=path;o.nMaxFile=MAX_PATH;
+    o.lpstrFilter=history?L"SQLite database\0*.db\0\0":L"NetPulse settings\0*.ini\0\0";o.lpstrDefExt=history?L"db":L"ini";
+    o.Flags=OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(restoring?OFN_FILEMUSTEXIST:OFN_OVERWRITEPROMPT);
+    if(!(restoring?GetOpenFileNameW(&o):GetSaveFileNameW(&o)))return;
+    wchar_t live[MAX_PATH];swprintf(live,MAX_PATH,L"%ls\\netpulse.db",app.directory);
+    if(_wcsicmp(path,app.ini)==0 || _wcsicmp(path,live)==0){app_error(w,L"Choose a backup file outside the active settings/database files.");return;}
+    if(restoring){
+        Config imported;if(!settings_import(path,&imported)){app_error(w,L"This file is not a recognized NetPulse settings backup.");return;}
+        if(MessageBoxW(w,L"Apply the plan and appearance from this backup? Missing or invalid values use safe defaults. Usage history and Windows startup are unchanged.",L"Restore settings",MB_YESNO|MB_ICONQUESTION)!=IDYES)return;
+        app_sample();if(!app_flush() || !settings_save(&imported)){app_error(w,L"Restore could not be saved. Current settings remain active.");return;}
+        app.config=imported;app.network.valid=0;app_refresh_usage();ui_theme();ui_attach();
+        for(int i=0;i<control_count;i++)DestroyWindow(page_controls[i]);settings_fields(w);show_page(w,5);
+    }else if(history){app_sample();if(!app_flush() || !db_backup(&app.db,path)){app_error(w,L"History backup failed. Check the destination and available space.");return;}}
+    else if(!settings_export(path)){app_error(w,L"Could not export settings.");return;}
+    wcscpy(app.status,restoring?L"Settings restored. Usage history is unchanged.":L"Backup saved successfully.");InvalidateRect(w,NULL,FALSE);
+}
 static HRESULT CALLBACK about_callback(HWND w,UINT notification,WPARAM wp,LPARAM lp,LONG_PTR data) {
     (void)wp;(void)data;
     if(notification==TDN_HYPERLINK_CLICKED && wcscmp((const wchar_t*)lp,L"https://github.com/avishka-Udara")==0)
@@ -388,7 +451,7 @@ static HRESULT CALLBACK about_callback(HWND w,UINT notification,WPARAM wp,LPARAM
 }
 LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
     switch(m) {
-    case WM_CREATE:settings_fields(w);show_page(w,0);return 0;
+    case WM_CREATE:settings_fields(w);show_page(w,0);SendMessageW(w,WM_CHANGEUISTATE,MAKEWPARAM(UIS_SET,UISF_HIDEFOCUS),0);return 0;
     case WM_MEASUREITEM:{MEASUREITEMSTRUCT *i=(MEASUREITEMSTRUCT*)lp;if(i->CtlType==ODT_COMBOBOX){i->itemHeight=px(28);return TRUE;}break;}
     case WM_DRAWITEM:{DRAWITEMSTRUCT *i=(DRAWITEMSTRUCT*)lp;
         if(i->CtlType==ODT_COMBOBOX){
@@ -397,7 +460,7 @@ LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
             HGDIOBJ old=SelectObject(i->hDC,app.font);wchar_t text[256]=L"";
             if(i->itemID!=(UINT)-1){LRESULT len=SendMessageW(i->hwndItem,CB_GETLBTEXTLEN,i->itemID,0);if(len>=0 && len<256)SendMessageW(i->hwndItem,CB_GETLBTEXT,i->itemID,(LPARAM)text);}
             RECT r=i->rcItem;r.left+=px(8);r.right-=px(4);DrawTextW(i->hDC,text,-1,&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);
-            if(i->itemState&ODS_FOCUS)DrawFocusRect(i->hDC,&i->rcItem);SelectObject(i->hDC,old);
+            if((i->itemState&ODS_FOCUS) && !(i->itemState&ODS_NOFOCUSRECT) && !(SendMessageW(w,WM_QUERYUISTATE,0,0)&UISF_HIDEFOCUS))DrawFocusRect(i->hDC,&i->rcItem);SelectObject(i->hDC,old);
         }else draw_button(i);return TRUE;}
 
     case WM_ERASEBKGND:{RECT r;GetClientRect(w,&r);FillRect((HDC)wp,&r,app.background);return 1;}
@@ -406,16 +469,24 @@ LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
         SetTextColor((HDC)wp,app.fg);SetBkColor((HDC)wp,m==WM_CTLCOLORSTATIC?app.bg:surface);return (LRESULT)(m==WM_CTLCOLORSTATIC?app.background:surface_brush);
     case WM_APP+10:{RECT r={0,px(page==0?204:604),px(680),px(page==0?536:650)};InvalidateRect(w,&r,FALSE);return 0;}
     case WM_COMMAND:
-        if(LOWORD(wp)>=200 && LOWORD(wp)<=204){show_page(w,LOWORD(wp)-200);return 0;}
+        if(!loading_fields && LOWORD(wp)!=ID_CORRECT_PEAK && LOWORD(wp)!=ID_CORRECT_OFF &&
+           (HIWORD(wp)==EN_CHANGE || HIWORD(wp)==CBN_SELCHANGE || HIWORD(wp)==CBN_EDITCHANGE)){
+            settings_dirty=1;app.status[0]=0;RECT footer={0,px(604),px(680),px(650)};InvalidateRect(w,&footer,FALSE);
+        }
+        if(LOWORD(wp)>=200 && LOWORD(wp)<=205){show_page(w,LOWORD(wp)-200);return 0;}
         switch(LOWORD(wp)){
         case ID_ABOUT:{
             TASKDIALOGCONFIG dialog={0};dialog.cbSize=sizeof(dialog);dialog.hwndParent=w;dialog.hInstance=app.instance;
             dialog.dwFlags=TDF_ENABLE_HYPERLINKS|TDF_ALLOW_DIALOG_CANCELLATION|TDF_SIZE_TO_CONTENT;
-            dialog.dwCommonButtons=TDCBF_CLOSE_BUTTON;dialog.pszWindowTitle=L"About NetPulse";dialog.pszMainInstruction=L"NetPulse 1.1.1";
+            dialog.dwCommonButtons=TDCBF_CLOSE_BUTTON;dialog.pszWindowTitle=L"About NetPulse";dialog.pszMainInstruction=L"NetPulse 1.2.0";
             dialog.pszContent=L"A lightweight, local network monitor.\n\nCreated by <a href=\"https://github.com/avishka-Udara\">Avishka Udara</a>\n\nCustomize your plan, appearance, and taskbar placement in Settings. Usage adjustments let you reset today's display or your billing cycle without deleting history.";
             dialog.pszFooter=L"GNU GPL version 3. Your usage data stays on this device.";dialog.pfCallback=about_callback;
             TaskDialogIndirect(&dialog,NULL,NULL,NULL);break;
         }
+        case ID_TRACKING:tracking_details(w);break;
+        case ID_BACKUP_SETTINGS:case ID_RESTORE_SETTINGS:case ID_BACKUP_DATA:manage_file(w,LOWORD(wp));break;
+        case ID_DATA_FOLDER:ShellExecuteW(w,L"open",app.directory,NULL,NULL,SW_SHOWNORMAL);break;
+        case ID_RETRY:app_sample();if(app_flush()){app_refresh_usage();wcscpy(app.status,L"Usage saved successfully.");}else app_error(w,L"Saving still failed. Check free space and folder permissions.");InvalidateRect(w,NULL,FALSE);break;
         case ID_SAVE:save_settings(w);break;case ID_EXPORT:export_usage(w);break;
         case ID_CORRECT:correct_usage(w,0);break;case ID_RESET:correct_usage(w,1);break;
         case ID_RESET_TODAY:
@@ -423,10 +494,10 @@ LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
                 app_sample();if(!app_flush() || !db_reset_today(&app.db,app.day_start,app.day_end))app_error(w,L"Could not reset today's display.");
                 else {app_refresh_usage();wcscpy(app.status,L"Today's display reset. New traffic continues counting.");InvalidateRect(w,NULL,FALSE);}
             }break;
-        case ID_CLOSE:case IDCANCEL:DestroyWindow(w);break;
+        case ID_CLOSE:case IDCANCEL:SendMessageW(w,WM_CLOSE,0,0);break;
         case IDOK:save_settings(w);break;
         }return 0;
-    case WM_CLOSE:DestroyWindow(w);return 0;
+    case WM_CLOSE:if(settings_dirty && MessageBoxW(w,L"Discard unsaved settings changes?",L"Unsaved changes",MB_YESNO|MB_ICONQUESTION)!=IDYES)return 0;DestroyWindow(w);return 0;
     case WM_DESTROY:app.settings=NULL;return 0;
     }
     return DefWindowProcW(w,m,wp,lp);
