@@ -1,0 +1,42 @@
+name: Windows build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned SQLite source
+        shell: pwsh
+        run: ./tools/fetch-sqlite.ps1
+      - name: Build and run native tests
+        shell: cmd
+        run: build.bat
+      - name: Test persistence statements
+        run: python tests/test_sql.py
+      - name: Test isolated startup registration
+        shell: cmd
+        run: build\test_startup.exe
+      - name: Package installer, portable app, and matching source
+        shell: pwsh
+        run: ./tools/package.ps1 -Iscc "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NetPulse-windows-x64
+          path: |
+            dist/NetPulse-windows-x64.zip
+            dist/NetPulse-1.1.1-source.zip
+            dist/NetPulse-1.1.1-windows-x64-setup.exe
+            dist/SHA256SUMS.txt
+  portable-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test portable accounting core
+        run: gcc -std=c11 -D_POSIX_C_SOURCE=200809L -Isrc tests/test_core.c src/core.c -o test_core && ./test_core
+      - name: Test ledger SQL
+        run: python3 tests/test_sql.py
