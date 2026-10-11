@@ -14,8 +14,8 @@ static HICON analytics_icon(const wchar_t *path){
     for(unsigned i=0;i<icon_count;i++)if(!wcscmp(path,app_icons[i].path))return app_icons[i].icon;
     /* Never resolve network paths or shell extensions just to decorate a row. */
     if(icon_count==128 || wcslen(path)<3 || path[1]!=L':' || GetDriveTypeW((wchar_t[]){path[0],L':',L'\\',0})!=DRIVE_FIXED)return NULL;
-    AppIcon *entry=&app_icons[icon_count++];wcscpy(entry->path,path);HICON small=NULL;
-    ExtractIconExW(path,0,NULL,&small,1);entry->icon=small;return small;
+    AppIcon *entry=&app_icons[icon_count++];wcscpy(entry->path,path);HICON extracted_icon=NULL;
+    ExtractIconExW(path,0,NULL,&extracted_icon,1);entry->icon=extracted_icon;return extracted_icon;
 }
 static void analytics_free(void){for(unsigned i=0;i<icon_count;i++)if(app_icons[i].icon)DestroyIcon(app_icons[i].icon);icon_count=0;free(app_rows);free(recent_rows);app_rows=recent_rows=NULL;selected_app[0]=0;app_row_count=recent_count=0;analytics_tick=0;}
 static void analytics_refresh(HWND w,int force) {
