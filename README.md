@@ -6,6 +6,8 @@ NetPulse is a small native Windows network monitor for people whose data plans d
 
 Created by [Avishka Udara](https://github.com/avishka-Udara). Free software under [GNU GPLv3](LICENSE).
 
+Explore [features](#features-and-functions), [installation](#install-and-run), [current settings](#current-settings-reference), and [first-time setup](#first-time-setup).
+
 ## What makes NetPulse different
 
 - **Your plan, your rules:** overnight peak/off-peak windows, separate allowances, configurable monthly resets, and manual adjustments.
@@ -66,7 +68,7 @@ This choice controls adapter-based totals. The optional app collector has a sepa
 
 Choose **Far left**, **Center (nearest free space)**, or **Right (beside system tray)** in **Taskbar**. Adjust **Fine offset (pixels)** or Ctrl-drag the widget for finer positioning. Placement remains subject to detected free space.
 
-When the preferred position is occupied, NetPulse looks for a suitable gap. If space cannot be verified, it falls back to the tray instead of deliberately covering taskbar buttons. Monitoring continues. Integration targets the primary taskbar and depends on Explorer's layout; see the compatibility limits below.
+When the preferred position is occupied, NetPulse looks for a suitable gap. If space cannot be verified, it falls back to the tray instead of deliberately covering taskbar buttons. Monitoring continues. The right-click menu also offers **Reattach to taskbar** to recreate the widget attachment. Integration targets the primary taskbar and depends on Explorer's layout; see the compatibility limits below.
 
 ### 7. Theme, transparency, and display size
 
@@ -152,7 +154,7 @@ Completed days are cached in small SQLite batches to speed up longer views. Part
 
 Use **Overview > Export history...** to export the adapter traffic ledger and cycle corrections as CSV. This CSV is not a per-app export, and daily display resets do not rewrite its raw traffic records.
 
-In **Manage**, **Export settings...** saves plan, budget, retention, taskbar, and appearance preferences. **Restore settings...** loads those preferences without changing Windows startup registration or importing traffic history. Restoring a finite retention preference can subsequently prune existing app history, so review the backup's policy before restoring it.
+In **Manage**, **Export settings...** saves plan, budget, retention, taskbar, and appearance preferences. **Restore settings...** loads those preferences without changing Windows startup registration or importing traffic history. Missing or invalid imported fields fall back to defaults, and an unrecognized backup is rejected. Restoring a finite retention preference can subsequently prune existing app history, so review the backup's policy before restoring it.
 
 **Back up history...** creates a consistent SQLite snapshot, including committed WAL data and per-app history. **Open data folder** reveals the local files. **Retry saving** retries pending writes after a storage problem has been resolved. For recovery, exit NetPulse and preserve the existing files before replacing the database with a known-good backup.
 
@@ -160,7 +162,7 @@ In **Manage**, **Export settings...** saves plan, budget, retention, taskbar, an
 
 Usage records and settings stay on your computer. There is no account, cloud upload, or monitoring telemetry. The top-right **?** opens Help and About, including the developer link and license information.
 
-Mouse interaction suppresses decorative focus boxes while keyboard navigation retains focus indicators. Settings show validation feedback, indicate unsaved changes, and offer a discard confirmation when closing with pending edits. Use **Save settings** to apply configuration changes.
+Mouse interaction suppresses decorative focus boxes while keyboard navigation retains focus indicators. Settings show validation feedback, indicate unsaved changes, and offer a discard confirmation when closing with pending edits. Use **Save settings** to apply configuration changes. Closing the settings window leaves monitoring running; choose **Exit NetPulse** from the right-click menu to save pending usage and stop the application.
 
 ## New in the 1.4.0 preview
 
@@ -189,6 +191,10 @@ flowchart LR
     V --> U[Taskbar and settings]
     E[Explorer layout events] --> P[Background placement worker]
     P --> U
+    T[Optional ETW app collector] --> H[App usage and capture coverage]
+    H --> L
+    L --> C[App charts and daily budget forecasts]
+    C --> U
 ```
 
 ## Install and run
