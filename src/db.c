@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
+#include <stdlib.h>
 static int failed(Database *d) { snprintf(d->error,sizeof(d->error),"%s",sqlite3_errmsg(d->handle));return 0; }
 static int sql(Database *d,const char *s) { return sqlite3_exec(d->handle,s,NULL,NULL,NULL)==SQLITE_OK ? 1:failed(d); }
 int db_open(Database *d,const wchar_t *path) {
@@ -14,7 +15,7 @@ int db_open(Database *d,const wchar_t *path) {
         "CREATE TABLE IF NOT EXISTS corrections(id INTEGER PRIMARY KEY,t INTEGER NOT NULL,p INTEGER NOT NULL,o INTEGER NOT NULL);"
         "CREATE INDEX IF NOT EXISTS corrections_time ON corrections(t);"
         "CREATE TABLE IF NOT EXISTS daily_resets(day INTEGER PRIMARY KEY,d INTEGER NOT NULL,u INTEGER NOT NULL);"
-        "CREATE TABLE IF NOT EXISTS sessions(start INTEGER PRIMARY KEY,last_seen INTEGER NOT NULL,system_uptime_ms INTEGER NOT NULL); PRAGMA user_version=1;");
+        "CREATE TABLE IF NOT EXISTS sessions(start INTEGER PRIMARY KEY,last_seen INTEGER NOT NULL,system_uptime_ms INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS app_usage(t INTEGER NOT NULL,app TEXT NOT NULL,pd INTEGER NOT NULL,pu INTEGER NOT NULL,od INTEGER NOT NULL,ou INTEGER NOT NULL,PRIMARY KEY(t,app)); PRAGMA user_version=2;");
 }
 int db_add(Database *d,time_t stamp,const Usage *u) {
     stamp-=stamp%60;
@@ -34,11 +35,18 @@ int db_flush(Database *d,uint64_t uptime) {
         if(sqlite3_step(s)!=SQLITE_DONE)goto error;sqlite3_reset(s);
     }
     sqlite3_finalize(s);s=NULL;
+    if(sqlite3_prepare_v2(d->handle,"INSERT INTO app_usage VALUES(?,?,?,?,?,?) ON CONFLICT(t,app) DO UPDATE SET pd=pd+excluded.pd,pu=pu+excluded.pu,od=od+excluded.od,ou=ou+excluded.ou",-1,&s,NULL)!=SQLITE_OK)goto error;
+    for(unsigned i=0;i<d->app_count;i++){
+        AppPending *p=&d->apps[i];sqlite3_bind_int64(s,1,p->stamp);sqlite3_bind_text16(s,2,p->path,-1,SQLITE_STATIC);
+        for(int band=0;band<2;band++){sqlite3_bind_int64(s,3+band*2,(sqlite3_int64)p->usage.down[band]);sqlite3_bind_int64(s,4+band*2,(sqlite3_int64)p->usage.up[band]);}
+        if(sqlite3_step(s)!=SQLITE_DONE)goto error;sqlite3_reset(s);
+    }
+    sqlite3_finalize(s);s=NULL;
     if(sqlite3_prepare_v2(d->handle,"INSERT INTO sessions VALUES(?,?,?) ON CONFLICT(start) DO UPDATE SET last_seen=excluded.last_seen,system_uptime_ms=excluded.system_uptime_ms",-1,&s,NULL)!=SQLITE_OK)goto error;
     sqlite3_bind_int64(s,1,d->session);sqlite3_bind_int64(s,2,time(NULL));sqlite3_bind_int64(s,3,(sqlite3_int64)uptime);
     if(sqlite3_step(s)!=SQLITE_DONE)goto error;
     sqlite3_finalize(s);s=NULL;if(!sql(d,"COMMIT"))goto rollback;
-    d->count=0;d->uptime=uptime;d->error[0]=0;return 1;
+    d->count=0;d->app_count=0;d->uptime=uptime;d->error[0]=0;return 1;
 error: failed(d);sqlite3_finalize(s);
 rollback: sqlite3_exec(d->handle,"ROLLBACK",NULL,NULL,NULL);return 0;
 }
@@ -121,4 +129,45 @@ int db_backup(Database *d,const wchar_t *path) {
     if(rc!=SQLITE_DONE || finish!=SQLITE_OK || close!=SQLITE_OK || !MoveFileExW(temporary,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){DeleteFileW(temporary);snprintf(d->error,sizeof(d->error),"Database backup failed; choose another location.");return 0;}
     return 1;
 }
-void db_close(Database *d){if(d->handle)sqlite3_close(d->handle);d->handle=NULL;}
+void db_close(Database *d){if(d->handle)sqlite3_close(d->handle);d->handle=NULL;free(d->apps);d->apps=NULL;}
+
+int db_app_add(Database *d,time_t stamp,const wchar_t *path,const Usage *u) {
+    if(!d->apps){d->apps=calloc(APP_PENDING_MAX,sizeof(AppPending));if(!d->apps){snprintf(d->error,sizeof(d->error),"Not enough memory for app tracking.");return 0;}}
+    stamp-=stamp%60;unsigned i;for(i=0;i<d->app_count;i++)if(d->apps[i].stamp==stamp && !wcscmp(d->apps[i].path,path))break;
+    if(i==d->app_count){if(i==APP_PENDING_MAX){snprintf(d->error,sizeof(d->error),"App storage backlog full. Tracking paused.");return 0;}
+        memset(&d->apps[i],0,sizeof(AppPending));wcsncpy(d->apps[i].path,path,APP_PATH-1);d->apps[i].stamp=stamp;d->app_count++;}
+    for(int p=0;p<2;p++){d->apps[i].usage.down[p]+=u->down[p];d->apps[i].usage.up[p]+=u->up[p];}return 1;
+}
+int db_period_usage(Database *d,time_t start,time_t end,Usage *u) {
+    memset(u,0,sizeof(*u));sqlite3_stmt *s=NULL;
+    if(sqlite3_prepare_v2(d->handle,"SELECT coalesce(sum(pd),0),coalesce(sum(pu),0),coalesce(sum(od),0),coalesce(sum(ou),0) FROM usage WHERE t>=? AND t<?",-1,&s,NULL)!=SQLITE_OK)return failed(d);
+    sqlite3_bind_int64(s,1,start);sqlite3_bind_int64(s,2,end);int rc=sqlite3_step(s);
+    if(rc==SQLITE_ROW)for(int p=0;p<2;p++){u->down[p]=(uint64_t)sqlite3_column_int64(s,p*2);u->up[p]=(uint64_t)sqlite3_column_int64(s,p*2+1);}sqlite3_finalize(s);if(rc!=SQLITE_ROW)return failed(d);
+    for(unsigned i=0;i<d->count;i++)if(d->pending[i].stamp>=start && d->pending[i].stamp<end)for(int p=0;p<2;p++){u->down[p]+=d->pending[i].usage.down[p];u->up[p]+=d->pending[i].usage.up[p];}return 1;
+}
+static int app_compare(const void *a,const void *b){const AppTotal *x=a,*y=b;uint64_t u=x->down+x->up,v=y->down+y->up;return u<v?1:u>v?-1:wcscmp(x->path,y->path);}
+int db_apps(Database *d,time_t start,time_t end,int period,AppTotal *out,unsigned capacity,unsigned *count) {
+    *count=0;sqlite3_stmt *s=NULL;const char *query=period==0?"SELECT app,sum(pd),sum(pu) FROM app_usage WHERE t>=? AND t<? GROUP BY app":period==1?"SELECT app,sum(od),sum(ou) FROM app_usage WHERE t>=? AND t<? GROUP BY app":"SELECT app,sum(pd+od),sum(pu+ou) FROM app_usage WHERE t>=? AND t<? GROUP BY app";
+    if(sqlite3_prepare_v2(d->handle,query,-1,&s,NULL)!=SQLITE_OK)return failed(d);sqlite3_bind_int64(s,1,start);sqlite3_bind_int64(s,2,end);
+    int rc;while((rc=sqlite3_step(s))==SQLITE_ROW){if(*count==capacity){sqlite3_finalize(s);snprintf(d->error,sizeof(d->error),"Too many apps to display. Choose a shorter range.");return 0;}
+        AppTotal *a=&out[(*count)++];memset(a,0,sizeof(*a));wcsncpy(a->path,sqlite3_column_text16(s,0),APP_PATH-1);a->down=(uint64_t)sqlite3_column_int64(s,1);a->up=(uint64_t)sqlite3_column_int64(s,2);}
+    sqlite3_finalize(s);if(rc!=SQLITE_DONE)return failed(d);
+    for(unsigned j=0;j<d->app_count;j++){AppPending *p=&d->apps[j];if(p->stamp<start || p->stamp>=end)continue;
+        unsigned i;for(i=0;i<*count;i++)if(!wcscmp(out[i].path,p->path))break;
+        if(i==*count){if(i==capacity)return 0;memset(&out[i],0,sizeof(out[i]));wcscpy(out[i].path,p->path);(*count)++;}
+        for(int b=0;b<2;b++)if(period<0 || period==b){out[i].down+=p->usage.down[b];out[i].up+=p->usage.up[b];}}
+    unsigned kept=0;for(unsigned i=0;i<*count;i++)if(out[i].down || out[i].up)out[kept++]=out[i];*count=kept;
+    qsort(out,*count,sizeof(*out),app_compare);return 1;
+}
+
+int db_app_series(Database *d,const time_t *edges,unsigned bins,int period,const wchar_t *path,uint64_t *down,uint64_t *up) {
+    memset(down,0,bins*sizeof(*down));memset(up,0,bins*sizeof(*up));sqlite3_stmt *s=NULL;
+    if(sqlite3_prepare_v2(d->handle,"SELECT t,pd,pu,od,ou FROM app_usage WHERE t>=? AND t<? AND (?='' OR app=?)",-1,&s,NULL)!=SQLITE_OK)return failed(d);
+    sqlite3_bind_int64(s,1,edges[0]);sqlite3_bind_int64(s,2,edges[bins]);sqlite3_bind_text16(s,3,path,-1,SQLITE_STATIC);sqlite3_bind_text16(s,4,path,-1,SQLITE_STATIC);
+    int rc;while((rc=sqlite3_step(s))==SQLITE_ROW){time_t t=(time_t)sqlite3_column_int64(s,0);unsigned i=0;while(i<bins && t>=edges[i+1])i++;if(i==bins)continue;
+        for(int p=0;p<2;p++)if(period<0 || p==period){down[i]+=(uint64_t)sqlite3_column_int64(s,1+p*2);up[i]+=(uint64_t)sqlite3_column_int64(s,2+p*2);}}
+    sqlite3_finalize(s);if(rc!=SQLITE_DONE)return failed(d);
+    for(unsigned j=0;j<d->app_count;j++){AppPending *a=&d->apps[j];if(a->stamp<edges[0] || a->stamp>=edges[bins] || (*path && wcscmp(path,a->path)))continue;
+        unsigned i=0;while(i<bins && a->stamp>=edges[i+1])i++;if(i==bins)continue;for(int p=0;p<2;p++)if(period<0 || p==period){down[i]+=a->usage.down[p];up[i]+=a->usage.up[p];}}
+    return 1;
+}

@@ -56,5 +56,15 @@ int main(void) {
     assert(sqlite3_exec(d.handle,"PRAGMA query_only=ON",0,0,0)==SQLITE_OK);assert(!db_reset_today(&d,86400,172800));assert(sqlite3_exec(d.handle,"PRAGMA query_only=OFF",0,0,0)==SQLITE_OK);
     assert(db_add(&d,172800,&transfer));assert(db_traffic(&d,172800,259200,&down,&up));assert(down==1048576 && up==131072);
     assert(db_flush(&d,1200));db_close(&d);assert(DeleteFileW(path));
+    assert(db_open(&d,L":memory:"));Usage au={0};au.down[0]=100;au.up[0]=25;
+    assert(db_app_add(&d,3600,L"browser.exe",&au));assert(db_app_add(&d,3660,L"browser.exe",&au));
+    au.down[0]=0;au.up[0]=0;au.down[1]=50;assert(db_app_add(&d,7200,L"sync.exe",&au));
+    AppTotal rows[8];unsigned count;assert(db_apps(&d,3600,7200,-1,rows,8,&count));assert(count==1 && rows[0].down==200 && rows[0].up==50);
+    time_t edges[]={3600,3660,7200,7260};uint64_t ds[3],us[3];assert(db_app_series(&d,edges,3,-1,L"",ds,us));assert(ds[0]==100 && ds[1]==100 && ds[2]==50 && us[1]==25);
+    assert(sqlite3_exec(d.handle,"PRAGMA query_only=ON",0,0,0)==SQLITE_OK);assert(!db_flush(&d,1300));assert(d.app_count==3);
+    assert(sqlite3_exec(d.handle,"PRAGMA query_only=OFF",0,0,0)==SQLITE_OK);assert(db_flush(&d,1400));assert(!d.app_count);
+    assert(db_apps(&d,0,8000,1,rows,8,&count));uint64_t sum=0;for(unsigned i=0;i<count;i++)sum+=rows[i].down+rows[i].up;assert(sum==50);
+    assert(db_app_series(&d,edges,3,-1,L"browser.exe",ds,us));assert(ds[0]==100 && ds[1]==100 && ds[2]==0);
+    assert(db_traffic(&d,0,8000,&down,&up));assert(down==0 && up==0);db_close(&d);
     puts("PASS: persistence, recovery, exact 128 MiB down / 16 MiB up across restart, midnight and corrections");return 0;
 }

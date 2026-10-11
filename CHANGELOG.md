@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0
+
+- Add optional elevated TCP/UDP per-app capture with a restricted local pipe and graceful shutdown.
+- Add day/month application charts, download/upload totals, period filters, and ranked app usage.
+- Add midnight, peak-start, or custom tracking days and independent daily peak/off-peak budgets.
+- Add recent-rate exhaustion forecasts and current high-contributor cautions; no traffic blocking.
+- Redesign settings around sidebar navigation and retain existing plan, appearance, backup and startup controls.
+- Preserve adapter accounting separately; extend persistence, schedule, forecasting and ETW decoding tests.
+
 ## 1.2.0
 
 - Add tray-only mode: fresh launches avoid the taskbar accessibility worker; mode changes pause/resume it.

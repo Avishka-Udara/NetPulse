@@ -222,3 +222,16 @@ Final 1.1.1 reduced-scan sample: 0.364% of one CPU core, 22.36 MiB working set, 
 
 - Fresh tray-only measurement: 30.0 seconds, 0.208% of one CPU core, 12.29 MiB working set, 1.83 MiB private memory, one thread, UI Automation not loaded. Short Windows 11 smoke sample; not a sustained resource guarantee.
 - Manage and Appearance layouts visually checked. Mouse dropdown selection has no dotted focus box; Tab navigation restores visible focus. Unsaved feedback appears, saving changes persists tray_only=0, and the placement worker starts (10 process threads observed). Crowded-taskbar fallback reports why the widget is hidden.
+
+
+## 1.3.0 development validation - 2026-10-11
+
+- New per-app persistence and time-series queries tested before/after flush, across boundaries, with selected-app/period filters, and after failed-write retry. Adapter totals remain independent.
+- Tracking-day tests cover midnight, peak start, custom minute, and 23/25-hour daylight-saving days. Forecast tests cover disabled, insufficient sample, zero rate, risk, and exhausted states.
+- Synthetic ETW records verify payload PID attribution (not event-header PID), upload/download direction, TCP/UDP IPv4/IPv6, malformed payload rejection, retransmit exclusion, and loopback exclusion.
+- Live HTTPS capture: 690,838 response-body bytes; 698,105 bytes attributed as download and 703 as upload to the test executable. No reported event loss; collector drained and exited cleanly. This validates one machine/transfer, not every network topology or driver.
+- Live UI showed per-app rankings and chart, daily budget editing, and exhaustion forecast/high-contributor indicators. Test profile is isolated from the installed user's history.
+- App capture is opt-in each session. No auto-started elevated service is installed. Short-lived/protected processes may be unresolved; historical traffic and disabled intervals are not backfilled. App counters include all interfaces and may differ from selected-adapter counters or ISP accounting.
+- Remaining checks: sustained high-throughput ETW loss/resource profiling, UAC cancellation under a standard account, mixed-DPI/high-contrast and screen-reader coverage, Windows 10, sleep/resume, and broader VPN tests. The new feature is an unsigned preview; prior low-memory measurements do not establish its overhead.
+
+Final 1.3.0 checks: all six native suites, four SQL tests, and isolated startup integration passed. A repeat live capture attributed 697,620 download bytes for a 690,838-byte HTTPS response, with 703 upload bytes, zero reported loss, and clean stop. The isolated database reopened with 48 app/minute records across 16 applications and passed integrity_check. Day/month charts and accessible app names/totals were inspected after restart. SQL tests initially failed because the restricted process could not open its temporary database; the same tests passed outside that restricted temporary environment.

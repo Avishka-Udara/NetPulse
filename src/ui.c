@@ -10,12 +10,14 @@
 #include <stdlib.h>
 #include <math.h>
 #include <wchar.h>
-enum { ID_START=101,ID_END,ID_PEAK,ID_OFF,ID_DAY,ID_TIME,ID_POSITION,ID_OFFSET,ID_ADAPTER,ID_SAVE,ID_EXPORT,ID_CORRECT_PEAK,ID_CORRECT_OFF,ID_CORRECT,ID_RESET,ID_CLOSE,ID_RESET_TODAY,ID_WIDTH,ID_FONT,ID_THEME,ID_BACKGROUND,ID_TOTALS,ID_STARTUP,ID_ABOUT,ID_MODE,ID_BACKUP_SETTINGS,ID_RESTORE_SETTINGS,ID_BACKUP_DATA,ID_DATA_FOLDER,ID_RETRY,ID_TRACKING };
+enum { ID_START=101,ID_END,ID_PEAK,ID_OFF,ID_DAY,ID_TIME,ID_POSITION,ID_OFFSET,ID_ADAPTER,ID_SAVE,ID_EXPORT,ID_CORRECT_PEAK,ID_CORRECT_OFF,ID_CORRECT,ID_RESET,ID_CLOSE,ID_RESET_TODAY,ID_WIDTH,ID_FONT,ID_THEME,ID_BACKGROUND,ID_TOTALS,ID_STARTUP,ID_ABOUT,ID_MODE,ID_BACKUP_SETTINGS,ID_RESTORE_SETTINGS,ID_BACKUP_DATA,ID_DATA_FOLDER,ID_RETRY,ID_TRACKING,ID_DAY_MODE,ID_DAY_START,ID_DAILY_PEAK,ID_DAILY_OFF,ID_APP_ENABLE,ID_APP_RANGE,ID_APP_DATE,ID_APP_PERIOD,ID_APP_LIST,ID_APP_ALL,ID_APP_PREV,ID_APP_NEXT };
 static AdapterChoice choices[MAX_ADAPTERS];static unsigned choice_count;
 static int scale=96,dragging,drag_origin,drag_offset;
 static int px(int n){return MulDiv(n,scale,96);}
+static void analytics_refresh(HWND w,int force);
+static void analytics_free(void);
 static int page=0,creating_page=0,settings_dirty,loading_fields;
-static HWND page_controls[96];static int control_pages[96],control_count;
+static HWND page_controls[160];static int control_pages[160],control_count;
 static HFONT heading_font,value_font;
 static COLORREF surface,border;
 static HBRUSH surface_brush;
@@ -37,9 +39,9 @@ static int menu_was_open;
 static ULONGLONG menu_closed;
 static void show_page(HWND w,int selected) {
     page=selected;
-    for(int i=0;i<control_count;i++)ShowWindow(page_controls[i],control_pages[i]==page || control_pages[i]==-1 || (control_pages[i]==-2 && (page==1 || page==2 || page==4))?SW_SHOW:SW_HIDE);
-    for(int i=200;i<=205;i++)InvalidateRect(GetDlgItem(w,i),NULL,TRUE);
-    InvalidateRect(w,NULL,TRUE);
+    for(int i=0;i<control_count;i++)ShowWindow(page_controls[i],control_pages[i]==page || control_pages[i]==-1 || (control_pages[i]==-2 && (page==1 || page==2 || page==4 || page==7))?SW_SHOW:SW_HIDE);
+    for(int i=200;i<=207;i++)InvalidateRect(GetDlgItem(w,i),NULL,TRUE);
+    analytics_refresh(w,1);InvalidateRect(w,NULL,TRUE);
 }
 static void amount(wchar_t *b,size_t n,uint64_t bytes) {
     double v=(double)bytes;const wchar_t *unit=L"B";
@@ -197,9 +199,10 @@ static LRESULT CALLBACK combo_proc(HWND w,UINT m,WPARAM wp,LPARAM lp,UINT_PTR id
     return result;
 }
 static HWND control(HWND parent,const wchar_t *cls,const wchar_t *text,int id,int x,int y,int width,int height,DWORD style) {
+    if(id>=200 && id<=207){static const int order[]={0,3,4,5,6,7,1,2};x=20;y=108+order[id-200]*46;width=144;}else {x+=176;if(y==550)y=650;}
     HWND w=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style|(wcscmp(cls,L"BUTTON")==0?BS_OWNERDRAW:0),px(x),px(y),px(width),px(height),parent,(HMENU)(INT_PTR)id,app.instance,NULL);
     if(wcscmp(cls,L"COMBOBOX")==0){SetWindowSubclass(w,combo_proc,1,0);SendMessageW(w,CB_SETMINVISIBLE,7,0);}
-    if(control_count<96){page_controls[control_count]=w;control_pages[control_count++]=creating_page;}
+    if(control_count<160){page_controls[control_count]=w;control_pages[control_count++]=creating_page;}
     SendMessageW(w,WM_SETFONT,(WPARAM)app.font,TRUE);if(wcscmp(cls,L"EDIT")==0)SendMessageW(w,EM_SETLIMITTEXT,32,0);return w;
 }
 static void label(HWND w,const wchar_t *t,int x,int y,int width){control(w,L"STATIC",t,0,x,y,width,20,0);}
@@ -219,8 +222,8 @@ static int get_clock(HWND w,int id,int *out) {
 }
 static void settings_fields(HWND w) {
     loading_fields=1;control_count=0;creating_page=-1;
-    const wchar_t *tabs[]={L"Overview",L"Data plan",L"Taskbar",L"Adjust usage",L"Appearance",L"Manage"};
-    for(int i=0;i<6;i++)control(w,L"BUTTON",tabs[i],200+i,24+i*106,82,100,36,WS_TABSTOP);
+    const wchar_t *tabs[]={L"Overview",L"Data plan",L"Taskbar",L"Adjust usage",L"Appearance",L"Manage",L"Applications",L"Daily budgets"};
+    const int navigation[]={0,6,7,1,2,3,4,5};for(int n=0;n<8;n++){int i=navigation[n];control(w,L"BUTTON",tabs[i],200+i,24+i*106,82,100,36,WS_TABSTOP);}
     control(w,L"BUTTON",L"Help and about",ID_ABOUT,620,24,36,32,WS_TABSTOP);
     control(w,L"BUTTON",L"Close",ID_CLOSE,544,550,112,36,WS_TABSTOP);
     creating_page=1;
@@ -276,6 +279,30 @@ static void settings_fields(HWND w) {
     control(w,L"BUTTON",L"Retry saving",ID_RETRY,444,388,180,36,WS_TABSTOP);
     label(w,L"Backup uses SQLite's snapshot API, including committed WAL data.",32,442,620);
     label(w,L"For recovery, exit NetPulse before replacing the database from a backup.",32,470,620);
+    creating_page=7;
+    label(w,L"Start a tracking day",32,218,290);
+    combo=control(w,L"COMBOBOX",L"",ID_DAY_MODE,32,248,280,160,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
+    SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Midnight (00:00)");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Peak time starts");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Custom time");SendMessageW(combo,CB_SETCURSEL,app.config.day_mode,0);
+    label(w,L"Custom start time",360,218,280);clock_input(w,ID_DAY_START,360,248,280);set_clock(w,ID_DAY_START,app.config.day_minute);EnableWindow(GetDlgItem(w,ID_DAY_START),app.config.day_mode==2);
+    label(w,L"Daily peak budget (GB)",32,314,280);edit(w,ID_DAILY_PEAK,L"0",40,344,264);set_number(w,ID_DAILY_PEAK,app.config.daily_peak_gb);
+    label(w,L"Daily off-peak budget (GB)",360,314,280);edit(w,ID_DAILY_OFF,L"0",368,344,264);set_number(w,ID_DAILY_OFF,app.config.daily_offpeak_gb);
+    label(w,L"0 = no budget. Uploads + downloads count. Warnings do not block apps.",32,404,624);
+    label(w,L"App budgets cover captured TCP/UDP on all interfaces, excluding loopback.",32,442,624);
+    label(w,L"Forecast uses the last 5 minutes; at least 60 seconds of capture is needed.",32,480,624);
+    label(w,L"A display reset preserves history and does not restore your daily budget.",32,518,624);
+    creating_page=6;
+    label(w,L"View",24,188,100);
+    combo=control(w,L"COMBOBOX",L"",ID_APP_RANGE,24,210,120,150,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
+    SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Day");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Month");SendMessageW(combo,CB_SETCURSEL,0,0);
+    label(w,L"Date",152,188,160);
+    control(w,DATETIMEPICK_CLASSW,L"",ID_APP_DATE,152,210,160,30,WS_TABSTOP|DTS_SHORTDATEFORMAT);
+    label(w,L"Traffic",320,188,140);
+    combo=control(w,L"COMBOBOX",L"",ID_APP_PERIOD,320,210,144,140,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
+    SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"All traffic");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Peak");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Off-peak");SendMessageW(combo,CB_SETCURSEL,0,0);
+    control(w,L"BUTTON",L"<",ID_APP_PREV,476,210,40,30,WS_TABSTOP);control(w,L"BUTTON",L">",ID_APP_NEXT,524,210,40,30,WS_TABSTOP);
+    control(w,L"BUTTON",L"All apps",ID_APP_ALL,572,210,84,30,WS_TABSTOP);
+    control(w,L"LISTBOX",L"",ID_APP_LIST,24,432,632,184,WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT);
+    control(w,L"BUTTON",L"Enable app tracking",ID_APP_ENABLE,24,650,210,36,WS_TABSTOP);
     creating_page=3;
     label(w,L"Peak used (GB)",32,238,280);edit(w,ID_CORRECT_PEAK,L"0",40,268,264);
     label(w,L"Off-peak used (GB)",360,238,280);edit(w,ID_CORRECT_OFF,L"0",368,268,264);
@@ -296,20 +323,21 @@ static void settings_fields(HWND w) {
     loading_fields=0;settings_dirty=0;
 }
 static void panel(HDC dc,int x,int y,int width,int height) {
-    HGDIOBJ oldBrush=SelectObject(dc,surface_brush);HPEN pen=CreatePen(PS_NULL,0,surface);HGDIOBJ oldPen=SelectObject(dc,pen);
+    x+=176;HGDIOBJ oldBrush=SelectObject(dc,surface_brush);HPEN pen=CreatePen(PS_NULL,0,surface);HGDIOBJ oldPen=SelectObject(dc,pen);
     RoundRect(dc,px(x),px(y),px(x+width),px(y+height),px(12),px(12));SelectObject(dc,oldBrush);SelectObject(dc,oldPen);DeleteObject(pen);
 }
 static void text_at(HDC dc,const wchar_t *text,int x,int y,int width,COLORREF color) {
-    SetTextColor(dc,color);RECT r={px(x),px(y),px(x+width),px(y+38)};DrawTextW(dc,text,-1,&r,DT_SINGLELINE|DT_END_ELLIPSIS);
+    x+=176;SetTextColor(dc,color);RECT r={px(x),px(y),px(x+width),px(y+38)};DrawTextW(dc,text,-1,&r,DT_SINGLELINE|DT_END_ELLIPSIS);
 }
+#include "analytics_ui.h"
 static void summary(HWND w,HDC dc) {
     (void)w;SetBkMode(dc,TRANSPARENT);HGDIOBJ old=SelectObject(dc,heading_font);
-    text_at(dc,L"NetPulse",24,22,400,app.fg);SelectObject(dc,app.font);
-    text_at(dc,L"Network activity, at a glance",24,51,440,app.muted);
+    text_at(dc,L"NetPulse",-152,22,160,app.fg);SelectObject(dc,app.font);
+    text_at(dc,L"Your data, clearly",-152,56,160,app.muted);
     
-    const wchar_t *titles[]={L"Today's activity",L"Your data plan",L"Taskbar",L"Usage adjustments",L"Appearance",L"Backup and recovery"};
-    const wchar_t *descriptions[]={L"Recorded today, or since your last daily reset",L"Flexible allowances, on your schedule",L"Widget placement and the connection to monitor",L"Enter your provider's current-cycle usage",L"Customize the widget without changing your usage",L"Keep a portable copy of your settings and history"};
-    SelectObject(dc,heading_font);text_at(dc,titles[page],24,142,630,app.fg);SelectObject(dc,app.font);text_at(dc,descriptions[page],24,174,630,app.muted);
+    const wchar_t *titles[]={L"Today's activity",L"Your data plan",L"Taskbar",L"Usage adjustments",L"Appearance",L"Backup and recovery",L"Applications",L"Daily budgets"};
+    const wchar_t *descriptions[]={L"Current tracking day, or since your last display reset",L"Flexible allowances, on your schedule",L"Widget placement and the connection to monitor",L"Enter your provider's current-cycle usage",L"Customize the widget without changing your usage",L"Keep a portable copy of your settings and history",L"Select an app to explore its history.",L"Set your tracking day and keep usage within your plan"};
+    SelectObject(dc,heading_font);text_at(dc,titles[page],24,142,630,app.fg);SelectObject(dc,app.font);text_at(dc,descriptions[page],24,page==6?166:174,630,app.muted);
     wchar_t b[256],value[48],live[48];
     if(page==0) {
         for(int i=0;i<2;i++) {
@@ -322,7 +350,7 @@ static void summary(HWND w,HDC dc) {
         for(int i=0;i<2;i++) {
             int x=i?352:24;double used=(app.usage.down[i]+app.usage.up[i])/1e9,cap=i?app.config.offpeak_gb:app.config.peak_gb;
             swprintf(b,256,L"%ls   %.2f GB",i?L"Off-peak":L"Peak",used);text_at(dc,b,x,396,304,app.fg);
-            RECT track={px(x),px(428),px(x+304),px(432)};HBRUSH brush=CreateSolidBrush(border);FillRect(dc,&track,brush);DeleteObject(brush);
+            RECT track={px(x+176),px(428),px(x+480),px(432)};HBRUSH brush=CreateSolidBrush(border);FillRect(dc,&track,brush);DeleteObject(brush);
             double fraction=cap>0?used/cap:0;if(fraction>1)fraction=1;track.right=track.left+(int)(px(304)*fraction);
             brush=CreateSolidBrush(cap>0 && used>cap?RGB(230,120,90):app.accent);FillRect(dc,&track,brush);DeleteObject(brush);
             if(cap>0)swprintf(b,256,L"%.2f GB %ls",fabs(cap-used),used>cap?L"over allowance":L"remaining");else wcscpy(b,L"Unlimited allowance");text_at(dc,b,x,446,304,app.muted);
@@ -333,8 +361,10 @@ static void summary(HWND w,HDC dc) {
         if(page==1)for(int row=0;row<3;row++)for(int col=0;col<2;col++)panel(dc,col?360:32,230+84*row,280,42);
         if(page==2)panel(dc,360,230,280,42);
         if(page==4){panel(dc,32,314,280,42);panel(dc,360,314,280,42);}
+        if(page==7){panel(dc,32,338,280,42);panel(dc,360,338,280,42);}
         if(page==3){panel(dc,32,262,280,42);panel(dc,360,262,280,42);}
     }
+    if(page==6 || page==7)analytics_draw(dc);
     const wchar_t *status=app.status[0]?app.status:settings_dirty?L"Unsaved changes - choose Save settings to apply them.":L"Both directions count. Daily totals exclude plan adjustments.";
     if(!app.storage_ok){MultiByteToWideChar(CP_UTF8,0,app.db.error,-1,b,256);status=b;}
     else if(!app.status[0] && !settings_dirty && !app.attached)status=L"Taskbar unavailable. Use the tray icon to open NetPulse.";
@@ -342,11 +372,11 @@ static void summary(HWND w,HDC dc) {
     else if(!app.status[0] && !settings_dirty && widget_hidden)status=L"Widget hidden: no verified free space. Tracking continues in the tray.";
     else if(!app.status[0] && !settings_dirty && !app.network_ok)status=L"Network counters unavailable. Retrying...";
     else if(!app.status[0] && !settings_dirty && !app.network.active_count)status=L"No active adapter. Check your connection or adapter selection.";
-    text_at(dc,status,24,610,632,app.storage_ok?app.muted:RGB(230,120,90));SelectObject(dc,old);
+    text_at(dc,status,24,710,632,app.storage_ok?app.muted:RGB(230,120,90));SelectObject(dc,old);
 }
 static void draw_button(DRAWITEMSTRUCT *item) {
     FillRect(item->hDC,&item->rcItem,app.background);
-    int id=(int)item->CtlID,nav=id>=200 && id<=205,active=nav && page==id-200;
+    int id=(int)item->CtlID,nav=id>=200 && id<=207,active=nav && page==id-200;
     int primary=id==ID_SAVE;
     COLORREF fill=primary?app.accent:((active || !nav)?surface:app.bg);
     if(item->itemState&ODS_SELECTED)fill=surface;
@@ -364,12 +394,16 @@ static void validation_error(HWND w,int control_id,const wchar_t *message) {
     wcsncpy(app.status,message,255);app.status[255]=0;
     HWND field=GetDlgItem(w,control_id);for(int i=0;i<control_count;i++)if(page_controls[i]==field && control_pages[i]>=0){show_page(w,control_pages[i]);break;}SetFocus(field);
     SendMessageW(w,WM_CHANGEUISTATE,MAKEWPARAM(UIS_CLEAR,UISF_HIDEFOCUS),0);
-    RECT footer={0,px(604),px(680),px(650)};InvalidateRect(w,&footer,FALSE);
+    RECT footer={0,px(704),px(856),px(750)};InvalidateRect(w,&footer,FALSE);
 }
 static void save_settings(HWND w) {
     Config c=app.config;double day,offset,width,font;
     if(!get_number(w,ID_WIDTH,136,320,&width)||floor(width)!=width){validation_error(w,ID_WIDTH,L"Width must be a whole number from 136 to 320.");return;}
     if(!get_number(w,ID_FONT,10,16,&font)||floor(font)!=font){validation_error(w,ID_FONT,L"Text size must be a whole number from 10 to 16.");return;}
+    c.day_mode=(int)SendDlgItemMessageW(w,ID_DAY_MODE,CB_GETCURSEL,0,0);
+    if(c.day_mode==2 && !get_clock(w,ID_DAY_START,&c.day_minute)){validation_error(w,ID_DAY_START,L"Day start: use HH:MM between 00:00 and 23:59.");return;}
+    if(!get_number(w,ID_DAILY_PEAK,0,1000000,&c.daily_peak_gb)){validation_error(w,ID_DAILY_PEAK,L"Daily peak budget: enter 0 to 1,000,000 GB.");return;}
+    if(!get_number(w,ID_DAILY_OFF,0,1000000,&c.daily_offpeak_gb)){validation_error(w,ID_DAILY_OFF,L"Daily off-peak budget: enter 0 to 1,000,000 GB.");return;}
     c.widget_width=(int)width;c.font_size=(int)font;
     c.theme=(int)SendDlgItemMessageW(w,ID_THEME,CB_GETCURSEL,0,0);
     c.transparent=(int)SendDlgItemMessageW(w,ID_BACKGROUND,CB_GETCURSEL,0,0);
@@ -419,7 +453,7 @@ static void tracking_details(HWND w) {
     if(!app.network.count)wcscat(text,L"No matching interface currently available.\n");
     sqlite3_stmt *stmt=NULL;int reset=0;
     if(sqlite3_prepare_v2(app.db.handle,"SELECT 1 FROM daily_resets WHERE day=?",-1,&stmt,NULL)==SQLITE_OK){sqlite3_bind_int64(stmt,1,app.day_start);reset=sqlite3_step(stmt)==SQLITE_ROW;}sqlite3_finalize(stmt);
-    wcscat(text,reset?L"\nToday's display was reset manually.":L"\nToday's display includes recorded traffic since midnight.");
+    wcscat(text,reset?L"\nToday's display was reset manually.":L"\nToday's display includes traffic since your configured day start.");
     wcscat(text,L"\n\nAdapter traffic includes local transfers and protocol overhead. Your provider may count differently. Traffic while NetPulse is closed is not recorded.");
     MessageBoxW(w,text,L"Tracking details",MB_OK|MB_ICONINFORMATION);
 }
@@ -452,8 +486,8 @@ static HRESULT CALLBACK about_callback(HWND w,UINT notification,WPARAM wp,LPARAM
 LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
     switch(m) {
     case WM_CREATE:settings_fields(w);show_page(w,0);SendMessageW(w,WM_CHANGEUISTATE,MAKEWPARAM(UIS_SET,UISF_HIDEFOCUS),0);return 0;
-    case WM_MEASUREITEM:{MEASUREITEMSTRUCT *i=(MEASUREITEMSTRUCT*)lp;if(i->CtlType==ODT_COMBOBOX){i->itemHeight=px(28);return TRUE;}break;}
-    case WM_DRAWITEM:{DRAWITEMSTRUCT *i=(DRAWITEMSTRUCT*)lp;
+    case WM_MEASUREITEM:{MEASUREITEMSTRUCT *i=(MEASUREITEMSTRUCT*)lp;if(i->CtlType==ODT_LISTBOX){i->itemHeight=px(58);return TRUE;}if(i->CtlType==ODT_COMBOBOX){i->itemHeight=px(28);return TRUE;}break;}
+    case WM_DRAWITEM:{DRAWITEMSTRUCT *i=(DRAWITEMSTRUCT*)lp;if(i->CtlType==ODT_LISTBOX){analytics_row(i);return TRUE;}
         if(i->CtlType==ODT_COMBOBOX){
             int selected=(i->itemState&ODS_SELECTED)!=0;HBRUSH b=CreateSolidBrush(selected?(app.dark?RGB(45,45,51):RGB(239,244,255)):surface);FillRect(i->hDC,&i->rcItem,b);DeleteObject(b);
             SetBkMode(i->hDC,TRANSPARENT);SetTextColor(i->hDC,app.fg);
@@ -467,22 +501,29 @@ LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
     case WM_PAINT:{PAINTSTRUCT ps;HDC dc=BeginPaint(w,&ps);FillRect(dc,&ps.rcPaint,app.background);summary(w,dc);EndPaint(w,&ps);return 0;}
     case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:
         SetTextColor((HDC)wp,app.fg);SetBkColor((HDC)wp,m==WM_CTLCOLORSTATIC?app.bg:surface);return (LRESULT)(m==WM_CTLCOLORSTATIC?app.background:surface_brush);
-    case WM_APP+10:{RECT r={0,px(page==0?204:604),px(680),px(page==0?536:650)};InvalidateRect(w,&r,FALSE);return 0;}
+    case WM_NOTIFY:if(((NMHDR*)lp)->idFrom==ID_APP_DATE && ((NMHDR*)lp)->code==DTN_DATETIMECHANGE && !loading_fields){analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);}break;
+    case WM_APP+10:{if(page==6 || page==7){ULONGLONG previous=analytics_tick;analytics_refresh(w,0);if(previous!=analytics_tick)InvalidateRect(w,NULL,FALSE);}else {RECT r={px(176),px(page==0?204:704),px(856),px(page==0?536:750)};InvalidateRect(w,&r,FALSE);}return 0;}
     case WM_COMMAND:
-        if(!loading_fields && LOWORD(wp)!=ID_CORRECT_PEAK && LOWORD(wp)!=ID_CORRECT_OFF &&
+        if(!loading_fields && LOWORD(wp)!=ID_APP_RANGE && LOWORD(wp)!=ID_APP_PERIOD && LOWORD(wp)!=ID_APP_LIST && LOWORD(wp)!=ID_CORRECT_PEAK && LOWORD(wp)!=ID_CORRECT_OFF &&
            (HIWORD(wp)==EN_CHANGE || HIWORD(wp)==CBN_SELCHANGE || HIWORD(wp)==CBN_EDITCHANGE)){
-            settings_dirty=1;app.status[0]=0;RECT footer={0,px(604),px(680),px(650)};InvalidateRect(w,&footer,FALSE);
+            settings_dirty=1;app.status[0]=0;RECT footer={0,px(704),px(856),px(750)};InvalidateRect(w,&footer,FALSE);
         }
-        if(LOWORD(wp)>=200 && LOWORD(wp)<=205){show_page(w,LOWORD(wp)-200);return 0;}
+        if(LOWORD(wp)>=200 && LOWORD(wp)<=207){show_page(w,LOWORD(wp)-200);return 0;}
         switch(LOWORD(wp)){
         case ID_ABOUT:{
             TASKDIALOGCONFIG dialog={0};dialog.cbSize=sizeof(dialog);dialog.hwndParent=w;dialog.hInstance=app.instance;
             dialog.dwFlags=TDF_ENABLE_HYPERLINKS|TDF_ALLOW_DIALOG_CANCELLATION|TDF_SIZE_TO_CONTENT;
-            dialog.dwCommonButtons=TDCBF_CLOSE_BUTTON;dialog.pszWindowTitle=L"About NetPulse";dialog.pszMainInstruction=L"NetPulse 1.2.0";
+            dialog.dwCommonButtons=TDCBF_CLOSE_BUTTON;dialog.pszWindowTitle=L"About NetPulse";dialog.pszMainInstruction=L"NetPulse 1.3.0 preview";
             dialog.pszContent=L"A lightweight, local network monitor.\n\nCreated by <a href=\"https://github.com/avishka-Udara\">Avishka Udara</a>\n\nCustomize your plan, appearance, and taskbar placement in Settings. Usage adjustments let you reset today's display or your billing cycle without deleting history.";
             dialog.pszFooter=L"GNU GPL version 3. Your usage data stays on this device.";dialog.pfCallback=about_callback;
             TaskDialogIndirect(&dialog,NULL,NULL,NULL);break;
         }
+        case ID_DAY_MODE:if(HIWORD(wp)==CBN_SELCHANGE)EnableWindow(GetDlgItem(w,ID_DAY_START),SendDlgItemMessageW(w,ID_DAY_MODE,CB_GETCURSEL,0,0)==2);break;
+        case ID_APP_RANGE:case ID_APP_PERIOD:if(HIWORD(wp)==CBN_SELCHANGE){analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);}break;
+        case ID_APP_LIST:if(HIWORD(wp)==LBN_SELCHANGE){LRESULT selected=SendDlgItemMessageW(w,ID_APP_LIST,LB_GETCURSEL,0,0);if(selected>=0 && (unsigned)selected<app_row_count)wcscpy(selected_app,app_rows[selected].path);analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);}break;
+        case ID_APP_ALL:selected_app[0]=0;analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);break;
+        case ID_APP_PREV:case ID_APP_NEXT:{SYSTEMTIME date;SendDlgItemMessageW(w,ID_APP_DATE,DTM_GETSYSTEMTIME,0,(LPARAM)&date);struct tm t={0};t.tm_year=date.wYear-1900;t.tm_mon=date.wMonth-1;t.tm_mday=date.wDay;t.tm_hour=12;t.tm_isdst=-1;int delta=LOWORD(wp)==ID_APP_PREV?-1:1;if(SendDlgItemMessageW(w,ID_APP_RANGE,CB_GETCURSEL,0,0)==1){t.tm_mday=1;t.tm_mon+=delta;}else t.tm_mday+=delta;mktime(&t);date.wYear=(WORD)(t.tm_year+1900);date.wMonth=(WORD)(t.tm_mon+1);date.wDay=(WORD)t.tm_mday;SendDlgItemMessageW(w,ID_APP_DATE,DTM_SETSYSTEMTIME,GDT_VALID,(LPARAM)&date);break;}
+        case ID_APP_ENABLE:if(tracker_enabled()){app_stop_tracking();app_sample();app_flush();wcscpy(app.tracking_status,L"Tracking paused. Saved history remains available.");}else {app.tracking_since=0;app.tracking_lost=0;if(tracker_start(w))wcscpy(app.tracking_status,L"Starting optional elevated collector...");else wcscpy(app.tracking_status,L"Tracking not enabled. Administrator consent may have been cancelled.");}analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);break;
         case ID_TRACKING:tracking_details(w);break;
         case ID_BACKUP_SETTINGS:case ID_RESTORE_SETTINGS:case ID_BACKUP_DATA:manage_file(w,LOWORD(wp));break;
         case ID_DATA_FOLDER:ShellExecuteW(w,L"open",app.directory,NULL,NULL,SW_SHOWNORMAL);break;
@@ -498,7 +539,7 @@ LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
         case IDOK:save_settings(w);break;
         }return 0;
     case WM_CLOSE:if(settings_dirty && MessageBoxW(w,L"Discard unsaved settings changes?",L"Unsaved changes",MB_YESNO|MB_ICONQUESTION)!=IDYES)return 0;DestroyWindow(w);return 0;
-    case WM_DESTROY:app.settings=NULL;return 0;
+    case WM_DESTROY:analytics_free();app.settings=NULL;return 0;
     }
     return DefWindowProcW(w,m,wp,lp);
 }
@@ -509,7 +550,8 @@ void ui_settings(void) {
     HDC dc=GetDC(NULL);scale=GetDeviceCaps(dc,LOGPIXELSX);ReleaseDC(NULL,dc);
     if(!heading_font)heading_font=CreateFontW(-px(22),0,0,0,FW_SEMIBOLD,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
     if(!value_font)value_font=CreateFontW(-px(30),0,0,0,FW_SEMIBOLD,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-    RECT r={0,0,px(680),px(650)};AdjustWindowRectEx(&r,WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,FALSE,0);
+    INITCOMMONCONTROLSEX common={sizeof(common),ICC_DATE_CLASSES};InitCommonControlsEx(&common);
+    RECT r={0,0,px(856),px(750)};AdjustWindowRectEx(&r,WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,FALSE,0);
     app.settings=CreateWindowExW(WS_EX_CONTROLPARENT,L"NetPulse.Settings",L"NetPulse - usage & settings",WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_CLIPCHILDREN,
         CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,NULL,NULL,app.instance,NULL);
     SetThreadDpiAwarenessContext(old);BOOL dark=app.dark;DwmSetWindowAttribute(app.settings,20,&dark,sizeof(dark));ShowWindow(app.settings,SW_SHOW);SetForegroundWindow(app.settings);

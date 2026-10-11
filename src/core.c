@@ -64,3 +64,22 @@ int counter_delta(uint64_t od,uint64_t ou,uint64_t d,uint64_t u,uint64_t *dd,uin
     /* Drivers can reset one counter independently. Keep the unaffected direction. */
     *dd=d>=od?d-od:0;*du=u>=ou?u-ou:0;return d>=od && u>=ou;
 }
+
+void tracking_day(const Config *c,time_t now,time_t *start,time_t *end) {
+    int minute=c->day_mode==1?c->peak_start:c->day_mode==2?c->day_minute:0;
+    struct tm t=*localtime(&now);t.tm_hour=minute/60;t.tm_min=minute%60;t.tm_sec=0;t.tm_isdst=-1;
+    time_t b=mktime(&t);
+    if(b>now){t=*localtime(&now);t.tm_mday--;t.tm_hour=minute/60;t.tm_min=minute%60;t.tm_sec=0;t.tm_isdst=-1;b=mktime(&t);}
+    *start=b;t=*localtime(&b);t.tm_mday++;t.tm_hour=minute/60;t.tm_min=minute%60;t.tm_sec=0;t.tm_isdst=-1;*end=mktime(&t);
+}
+int64_t period_seconds(const Config *c,time_t start,time_t end,int period) {
+    int64_t seconds=0;while(start<end){struct tm t=*localtime(&start);time_t next=start+60-t.tm_sec;if(next>end)next=end;
+        if((is_peak(c,t.tm_hour*60+t.tm_min)?0:1)==period)seconds+=next-start;start=next;}return seconds;
+}
+Forecast budget_forecast(double cap,uint64_t used,double rate,double observed,double remaining) {
+    Forecast f={0,0,0};if(cap<=0)return f;
+    f.projected=(double)used;if((double)used>=cap){f.state=4;return f;}
+    if(observed<60 || remaining<=0){f.state=1;return f;}
+    if(rate<0)rate=0;f.projected+=rate*remaining;f.remaining_seconds=rate>0?(cap-used)/rate:0;
+    f.state=f.projected>cap?3:2;return f;
+}

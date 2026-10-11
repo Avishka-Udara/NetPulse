@@ -5,12 +5,14 @@
 #include "core.h"
 #include "network.h"
 #include "db.h"
+#include "collector.h"
 typedef struct {
     HINSTANCE instance; HWND controller,widget,settings,taskbar;
     Config config; Network network; Database db; Usage usage;
     wchar_t directory[MAX_PATH],ini[MAX_PATH],status[256];
     time_t last_time,cycle,next_cycle,day_start,day_end; ULONGLONG last_tick,last_flush;
     uint64_t today_down,today_up;
+    time_t tracking_since,tracking_heartbeat;uint64_t tracking_lost;wchar_t tracking_status[160];
     double down_rate,up_rate; int dark,quitting,storage_ok,network_ok,attached;
     UINT taskbar_created; HFONT font,small_font; HBRUSH background;
     COLORREF bg,fg,muted,accent; HICON icon;
@@ -23,6 +25,7 @@ int settings_import(const wchar_t *path,Config *out);
 int settings_load(void);
 int settings_save(const Config *c);
 void app_sample(void);
+void app_stop_tracking(void);
 int app_flush(void);
 void app_refresh_usage(void);
 void app_error(HWND owner,const wchar_t *message);

@@ -22,7 +22,7 @@ cl /nologo /O1 /w /c /DSQLITE_THREADSAFE=0 /DSQLITE_DEFAULT_MEMSTATUS=0 /DSQLITE
 if errorlevel 1 exit /b 1
 rc /nologo /I src /fo build\netpulse.res src\netpulse.rc
 if errorlevel 1 exit /b 1
-cl %COMMON% src\main.c src\core.c src\network.c src\db.c src\settings.c src\ui.c src\taskbar.c src\startup.c build\sqlite3.obj build\netpulse.res /Fobuild\ /Febuild\NetPulse.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF user32.lib gdi32.lib shell32.lib advapi32.lib iphlpapi.lib comdlg32.lib dwmapi.lib comctl32.lib ole32.lib oleaut32.lib uuid.lib
+cl %COMMON% src\main.c src\collector.c src\core.c src\network.c src\db.c src\settings.c src\ui.c src\taskbar.c src\startup.c build\sqlite3.obj build\netpulse.res /Fobuild\ /Febuild\NetPulse.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF user32.lib gdi32.lib shell32.lib advapi32.lib iphlpapi.lib comdlg32.lib dwmapi.lib comctl32.lib ole32.lib oleaut32.lib uuid.lib
 if errorlevel 1 exit /b 1
 cl %COMMON% tests\test_core.c src\core.c /Fobuild\ /Febuild\test_core.exe
 if errorlevel 1 exit /b 1
@@ -36,6 +36,10 @@ cl %COMMON% tests\test_settings.c src\settings.c src\core.c /Fobuild\ /Febuild\t
 if errorlevel 1 exit /b 1
 cl %COMMON% tests\test_placement.c /Fobuild\ /Febuild\test_placement.exe
 if errorlevel 1 exit /b 1
+cl %COMMON% tests\test_capture.c src\collector.c /Fobuild\ /Febuild\test_capture.exe /link advapi32.lib shell32.lib ole32.lib winhttp.lib
+if errorlevel 1 exit /b 1
+cl %COMMON% tests\test_etw.c /Fobuild\ /Febuild\test_etw.exe /link advapi32.lib shell32.lib ole32.lib
+if errorlevel 1 exit /b 1
 goto test
 :llvm
 set "COMMON=-Os -std=c11 -Wall -Wextra -Wno-misleading-indentation -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -Isrc -Ivendor"
@@ -43,7 +47,7 @@ set "COMMON=-Os -std=c11 -Wall -Wextra -Wno-misleading-indentation -DUNICODE -D_
 if errorlevel 1 exit /b 1
 "%LLVM%\llvm-windres.exe" -I src src\netpulse.rc -O coff -o build\netpulse.res
 if errorlevel 1 exit /b 1
-"%LLVM%\clang.exe" %COMMON% -municode -mwindows src\main.c src\core.c src\network.c src\db.c src\settings.c src\ui.c src\taskbar.c src\startup.c build\sqlite3.o build\netpulse.res -o build\NetPulse.exe -Wl,--gc-sections -s -luser32 -lgdi32 -lshell32 -ladvapi32 -liphlpapi -lcomdlg32 -ldwmapi -lcomctl32 -lole32 -loleaut32 -luuid
+"%LLVM%\clang.exe" %COMMON% -municode -mwindows src\main.c src\collector.c src\core.c src\network.c src\db.c src\settings.c src\ui.c src\taskbar.c src\startup.c build\sqlite3.o build\netpulse.res -o build\NetPulse.exe -Wl,--gc-sections -s -luser32 -lgdi32 -lshell32 -ladvapi32 -liphlpapi -lcomdlg32 -ldwmapi -lcomctl32 -lole32 -loleaut32 -luuid
 if errorlevel 1 exit /b 1
 "%LLVM%\clang.exe" %COMMON% tests\test_core.c src\core.c -o build\test_core.exe
 if errorlevel 1 exit /b 1
@@ -57,6 +61,10 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "%LLVM%\clang.exe" %COMMON% tests\test_placement.c -o build\test_placement.exe
 if errorlevel 1 exit /b 1
+"%LLVM%\clang.exe" %COMMON% -municode tests\test_capture.c src\collector.c -o build\test_capture.exe -ladvapi32 -lshell32 -lole32 -lwinhttp
+if errorlevel 1 exit /b 1
+"%LLVM%\clang.exe" %COMMON% tests\test_etw.c -o build\test_etw.exe -ladvapi32 -lshell32 -lole32
+if errorlevel 1 exit /b 1
 :test
 build\test_core.exe
 if errorlevel 1 exit /b 1
@@ -67,6 +75,8 @@ if errorlevel 1 exit /b 1
 build\test_settings.exe
 if errorlevel 1 exit /b 1
 build\test_placement.exe
+if errorlevel 1 exit /b 1
+build\test_etw.exe
 if errorlevel 1 exit /b 1
 copy /y config.ini build\config.ini >nul
 echo Built and tested build\NetPulse.exe

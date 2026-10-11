@@ -25,3 +25,13 @@ Use `tools/measure-resources.ps1 -ProcessId <id> -Minutes 60 -OutputPath <file.c
 ## Distribution
 
 Run native/SQL/startup tests and check clean install, upgrade, uninstall, data preservation, matching source archives and checksums. A matching version tag creates a draft release; review it and the outstanding limits before publishing. Signing requires the maintainer's certificate and is not supplied by this repository.
+
+## Per-app capture and forecasting
+
+- Enable/decline UAC from a standard Windows account. Confirm adapter monitoring works independently and no helper starts until explicitly enabled.
+- Run `build/test_capture.exe` manually to validate a public HTTPS transfer and collector shutdown. It requests elevation for its optional helper and downloads the public repository's SQLite header; do not run unattended CI with UAC.
+- Compare known TCP/UDP transfers, IPv4/IPv6, same-executable subprocesses, process exits/PID reuse, loopback, LAN, VPN and multiple adapters. App scope differs from adapter scope and must remain clearly labelled.
+- Browse days/months and filters, select a row, inspect empty ranges, use keyboard navigation, and confirm saved data survives restart and backup.
+- Test midnight, peak-start and custom starts, overnight bands, short months and DST. A manual display reset must not clear app history or replenish budgets.
+- Try zero, small, exhausted and large daily budgets. Confirm warning-only behavior, minimum observation window, zero-traffic decay, time-to-exhaustion, and high-contributor labels. Disabled capture, stale heartbeats and event loss must not produce confident forecasts.
+- Stop capture and exit the UI; verify the helper and its private ETW session disappear. Repeat under load, storage failure, suspend/resume and forced parent termination.

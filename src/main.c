@@ -4,6 +4,7 @@
 #include <shlobj.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 App app;
 void app_error(HWND owner,const wchar_t *message){MessageBoxW(owner,message,L"NetPulse",MB_OK|MB_ICONWARNING);}
 int app_flush(void) {
@@ -12,11 +13,24 @@ int app_flush(void) {
 void app_refresh_usage(void) {
     time_t now=time(NULL);app.cycle=cycle_start(&app.config,now);app.next_cycle=cycle_next(&app.config,now);
     Usage u;if(db_totals(&app.db,app.cycle,app.next_cycle,&u))app.usage=u;else app.storage_ok=0;
-    struct tm day=*localtime(&now);day.tm_hour=day.tm_min=day.tm_sec=0;day.tm_isdst=-1;
-    app.day_start=mktime(&day);day.tm_mday++;day.tm_isdst=-1;app.day_end=mktime(&day);
+    tracking_day(&app.config,now,&app.day_start,&app.day_end);
     if(!db_today(&app.db,app.day_start,app.day_end,&app.today_down,&app.today_up))app.storage_ok=0;
 }
+static void poll_apps(void) {
+    TrackPacket packet;int result=0;
+    for(unsigned i=0;i<256 && (result=tracker_read(&packet))==1;i++){
+        if(packet.error){swprintf(app.tracking_status,160,L"Collector error %lu. Enable tracking to retry.",(unsigned long)packet.error);tracker_stop();break;}
+        if(!packet.path[0]){time_t heartbeat=time(NULL);if(!app.tracking_since || !app.tracking_heartbeat || heartbeat-app.tracking_heartbeat>5 || heartbeat<app.tracking_heartbeat)app.tracking_since=heartbeat;app.tracking_heartbeat=heartbeat;app.tracking_lost=packet.lost;wcscpy(app.tracking_status,packet.lost?L"Incomplete capture: events were lost. Forecast unavailable.":L"Tracking TCP/UDP across all interfaces. Loopback excluded.");continue;}
+        time_t stamp=(time_t)packet.stamp;if(stamp<0 || stamp>time(NULL)+60)continue;
+        Usage usage;usage_split(&app.config,stamp,stamp,packet.down,packet.up,&usage);
+        if(app.db.app_count>=APP_PENDING_MAX-1 && !app_flush()){tracker_stop();wcscpy(app.tracking_status,L"App tracking paused: storage backlog is full.");break;}
+        if(!db_app_add(&app.db,stamp,packet.path,&usage)){app.storage_ok=0;tracker_stop();wcscpy(app.tracking_status,L"App tracking paused: cannot queue usage.");break;}
+    }
+    if(result<0)wcscpy(app.tracking_status,L"App tracking stopped. Enable tracking to reconnect.");
+}
+void app_stop_tracking(void){tracker_request_stop();ULONGLONG until=GetTickCount64()+5000;while(tracker_enabled() && GetTickCount64()<until){poll_apps();Sleep(10);}tracker_stop();}
 void app_sample(void) {
+    poll_apps();
     uint64_t down=0,up=0;ULONGLONG tick=GetTickCount64();time_t now=time(NULL);
     if(app.db.count>=PENDING_MAX-2 && !app_flush()) {
         app.network.valid=0;app.down_rate=app.up_rate=0;
@@ -73,17 +87,21 @@ static LRESULT CALLBACK controller_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
         if(LOWORD(wp)==CMD_SETTINGS)ui_settings();
         if(LOWORD(wp)==CMD_REATTACH){if(app.widget)DestroyWindow(app.widget);app.widget=NULL;ui_attach();}
         if(LOWORD(wp)==CMD_EXIT)SendMessageW(w,WM_CLOSE,0,0);return 0;
-    case WM_QUERYENDSESSION:app_sample();app_flush();return TRUE;
+    case WM_QUERYENDSESSION:app_stop_tracking();app_sample();app_flush();return TRUE;
     case WM_ENDSESSION:if(wp){app_flush();app.quitting=1;DestroyWindow(w);}return 0;
     case WM_CLOSE:
-        app_sample();if(!app_flush() && MessageBoxW(app.settings,L"Recent usage could not be saved. Exit and lose unsaved samples?",L"NetPulse",MB_YESNO|MB_ICONWARNING)!=IDYES)return 0;
-        app.quitting=1;DestroyWindow(w);return 0;
+        app_stop_tracking();app_sample();if(!app_flush() && MessageBoxW(app.settings,L"Recent usage could not be saved. Exit and lose unsaved samples?",L"NetPulse",MB_YESNO|MB_ICONWARNING)!=IDYES)return 0;
+        app.quitting=1;tracker_stop();DestroyWindow(w);return 0;
     case WM_DESTROY:KillTimer(w,1);ui_destroy();PostQuitMessage(0);return 0;
     }
     return DefWindowProcW(w,m,wp,lp);
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,PWSTR command,int show) {
-    (void)previous;(void)show;memset(&app,0,sizeof(app));app.instance=instance;app.storage_ok=1;
+    (void)previous;(void)show;
+    int helper_argc=0;LPWSTR *helper_argv=CommandLineToArgvW(GetCommandLineW(),&helper_argc);
+    if(helper_argv && helper_argc==4 && !wcscmp(helper_argv[1],L"--collector")){int rc=collector_run(helper_argv[2],wcstoul(helper_argv[3],NULL,10));LocalFree(helper_argv);return rc;}
+    if(helper_argv)LocalFree(helper_argv);
+    memset(&app,0,sizeof(app));app.instance=instance;app.storage_ok=1;
     HANDLE mutex=CreateMutexW(NULL,FALSE,L"Local\\NetPulse.Desktop.Singleton");
     if(!mutex)return 1;
     if(GetLastError()==ERROR_ALREADY_EXISTS){HWND old=FindWindowW(L"NetPulse.Controller",L"NetPulse");if(old){if(wcscmp(command,L"--quit")==0)PostMessageW(old,WM_CLOSE,0,0);else PostMessageW(old,WM_COMMAND,CMD_SETTINGS,0);}CloseHandle(mutex);return 0;}

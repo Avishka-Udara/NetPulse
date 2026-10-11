@@ -36,15 +36,27 @@ flowchart LR
     P --> U
 ```
 
+## Per-app usage and daily budgets
+
+**Applications** shows recorded TCP/UDP traffic by executable, with separate download/upload totals, a ranked list, and stacked charts. Choose a date and **Day** or **Month**, filter peak/off-peak traffic, and select an app to see its chart. Day charts show hourly buckets; month charts show tracking days. App history starts when capture is enabled; older adapter totals cannot be assigned to apps retroactively.
+
+Choose **Enable app tracking** to start an optional elevated ETW collector. Windows may request administrator consent. The main UI retains its existing permissions; the helper only collects network-event metadata and sends byte totals through a restricted local pipe. It does not inspect packet contents or persist remote addresses. Stopping tracking drains available events, and the helper stops when the main process exits. Enable capture again after restarting NetPulse; no elevated service or automatic UAC prompt is installed.
+
+**Daily budgets** lets you start each tracking day at midnight, at peak start, or at a custom HH:MM time. Set separate daily peak/off-peak allowances in decimal GB; 0 disables a budget. These budgets cover captured app traffic across all interfaces, excluding loopback, and are separate from your monthly adapter-based plan. VPN encapsulation and local transfers can affect this scope. Both directions count. Display resets do not replenish a budget or erase app history.
+
+Forecasts use the recent five-minute average for the active time band, require at least 60 seconds of eligible capture, and project until the current band ends or the tracking day resets, whichever comes first. Idle time within that band remains in the average. A caution appears when the remaining allowance is projected to run out, and apps contributing at least 5% of the current rate are marked. These are warnings, not bandwidth caps or firewall rules. Missing capture, sleep, unknown processes, and changing workloads limit prediction accuracy; an event-loss indication disables the forecast for that capture session. Totals represent recorded traffic, not guaranteed complete billing usage.
+
+Per-app totals remain separate from adapter counters to avoid adding the same traffic twice. App identity uses the executable path and validates process lifetime against event time; unresolved processes stay explicitly grouped. Retransmit and copy events are excluded. Browser tabs sharing an executable are grouped together. Paths and byte counts remain in the local database and its backups.
+
 ## Install and run
 
-**Version 1.2.0 is an unsigned Windows release candidate.** Windows 10/11 x64 is the current target. macOS/Linux are planned ports, not supported builds.
+**Version 1.3.0 is an unsigned Windows release candidate.** Windows 10/11 x64 is the current target. macOS/Linux are planned ports, not supported builds.
 
 | Package | Purpose |
 | --- | --- |
-| `NetPulse-1.2.0-windows-x64-setup.exe` | Per-user installer, Start menu entry, upgrades and uninstall; no administrator rights required |
+| `NetPulse-1.3.0-windows-x64-setup.exe` | Per-user installer, Start menu entry, upgrades and uninstall; no administrator rights required |
 | `NetPulse-windows-x64.zip` | Portable app; extract before running |
-| `NetPulse-1.2.0-source.zip` | Matching GPL source and build scripts |
+| `NetPulse-1.3.0-source.zip` | Matching GPL source and build scripts |
 | `SHA256SUMS.txt` | Package checksums |
 
 Published binaries belong in [GitHub Releases](https://github.com/Avishka-Udara/NetPulse/releases). A source push does not itself create a release. Successful [CI runs](https://github.com/Avishka-Udara/NetPulse/actions) also produce artifacts.
@@ -73,11 +85,13 @@ Only one instance runs at a time. A normal second launch opens the existing sett
 | Taskbar | Position preference, fine offset, adapter, Windows startup |
 | Adjust usage | Provider-aligned cycle totals, cycle reset, daily-display reset |
 | Appearance | Theme, background, width, text size, display details, and taskbar or tray-only mode |
+| Applications | Day/month charts, app ranking, period filters, optional collector, and live budget cautions |
+| Daily budgets | Midnight/peak/custom day start and separate daily peak/off-peak allowances |
 | Manage | Export/restore settings, consistent history snapshots, open data folder, retry saving |
 
 Both directions count toward the plan. Units are decimal: 1 GB = 1,000,000,000 bytes. K/M/G mean KB/MB/GB; `/s` identifies speed. Equal peak times mean all-day peak; overnight ranges work, zero allowance means unlimited, and reset days 29-31 clamp to shorter months. Scheduling follows Windows local time and daylight-saving rules.
 
-Peak-hour changes affect future samples; history retains its original classification. Reset-schedule changes recompute the selected cycle. Daily-display resets persist until the next midnight and do not change raw traffic or cycle adjustments. Ctrl-drag fine-tunes widget offset, subject to detected free space. Larger text can increase minimum width.
+Peak-hour changes affect future samples; history retains its original classification. Reset-schedule changes recompute the selected cycle. Daily-display resets persist until the next configured tracking day and do not change raw traffic or cycle adjustments. Ctrl-drag fine-tunes widget offset, subject to detected free space. Larger text can increase minimum width.
 
 ## Tracking, backup, and lower-overhead mode
 
@@ -101,6 +115,9 @@ The build is unsigned. Windows 10, mixed-DPI, sign-in, Explorer-menu recovery, a
 
 ## Resource use
 
+Optional per-app tracking adds a helper process, ETW buffers, and bounded aggregation queues. The analytics view allocates its query buffers only when opened, releases them when settings close, and refreshes at most every five seconds. Earlier resource measurements below describe the older baseline, not this new feature.
+
+
 NetPulse has no browser engine or managed-runtime dependency. Sampling is independent of the placement worker. Explorer-scoped event hooks avoid callbacks from unrelated apps, container elements skip unnecessary property queries, and rendering reuses its buffer and fonts. SQLite commits in batches rather than every sample.
 
 The previous 1.1.0 background smoke sample measured **22.55 MiB working set**, **3.75 MiB private memory**, and **0.625% of one CPU core** over 30 seconds. Working set includes shared libraries; activity, drivers, layout, and open settings affect usage. These are observations, not guarantees. The original sub-10-MiB target is not met. Version 1.1.1 measured 0.364% of one CPU core, 22.36 MiB working set, and 3.34 MiB private memory in a 30-second run. The same-session baseline was also 0.365% CPU; sustained savings are not established. See [VALIDATION.md](VALIDATION.md).
@@ -123,7 +140,7 @@ python tests/test_sql.py
 .\tools\package.ps1 -Iscc "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 ```
 
-The build runs core, database, network, settings, and placement tests. The separate startup integration test redirects the registry inside its own process and never modifies the real Run entry. The live counter test requires an active adapter. SQLite 3.53.4 source is included; `tools/fetch-sqlite.ps1` restores the checksum-pinned amalgamation if needed. CI includes Windows tests/packaging and portable core/SQL checks on Linux; that job does not build a Linux desktop app.
+The build runs core, database, network, settings, placement, and ETW event-decoding tests. The separate startup integration test redirects the registry inside its own process and never modifies the real Run entry. The live counter test requires an active adapter. SQLite 3.53.4 source is included; `tools/fetch-sqlite.ps1` restores the checksum-pinned amalgamation if needed. CI includes Windows tests/packaging and portable core/SQL checks on Linux; that job does not build a Linux desktop app.
 
 | Source | Responsibility |
 | --- | --- |
@@ -142,6 +159,6 @@ NetPulse is **GPL-3.0-only**. Distribute matching source with binaries and prese
 
 ## Release automation and extended checks
 
-Pushing a tag matching the installer version (for example `v1.2.0`) runs tests and creates a **draft** GitHub release with installer, portable ZIP, corresponding source, checksums, and generated notes. It does not publish automatically or provide code signing. Review [QA.md](QA.md) before publishing.
+Pushing a tag matching the installer version (for example `v1.3.0`) runs tests and creates a **draft** GitHub release with installer, portable ZIP, corresponding source, checksums, and generated notes. It does not publish automatically or provide code signing. Review [QA.md](QA.md) before publishing.
 
 For longer measurements, run `tools/measure-resources.ps1 -ProcessId <id> -Minutes 60 -OutputPath samples.csv`. The script only observes the selected NetPulse process. User-reported memory below 10 MB is plausible for a different memory metric/environment; it is not presented as a universal guarantee.

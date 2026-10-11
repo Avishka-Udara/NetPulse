@@ -36,12 +36,24 @@ int main(void) {
     assert(cycle_start(&c,at(2026,2,28,8,0,0))==at(2026,2,28,8,0,0));
     assert(cycle_next(&c,at(2026,2,28,8,0,0))==at(2026,3,31,8,0,0));
     assert(cycle_start(&c,at(2024,2,29,8,0,0))==at(2024,2,29,8,0,0));
+    time_t begin,finish;config_defaults(&c);c.day_mode=1;
+    tracking_day(&c,at(2026,10,8,7,59,59),&begin,&finish);assert(begin==at(2026,10,7,8,0,0) && finish==at(2026,10,8,8,0,0));
+    tracking_day(&c,at(2026,10,8,8,0,0),&begin,&finish);assert(begin==at(2026,10,8,8,0,0));
+    c.day_mode=2;c.day_minute=1335;tracking_day(&c,at(2026,10,8,1,0,0),&begin,&finish);assert(begin==at(2026,10,7,22,15,0));
+    assert(period_seconds(&c,at(2026,10,7,7,59,0),at(2026,10,7,8,1,0),0)==60);
+    assert(budget_forecast(0,99,100,100,100).state==0);
+    assert(budget_forecast(1000,100,10,59,100).state==1);
+    assert(budget_forecast(1000,100,10,60,100).state==3);
+    assert(budget_forecast(1000,100,0,60,100).state==2);
+    assert(budget_forecast(1000,1000,0,0,100).state==4);
     /* Windows CRT POSIX timezone format; reset in the spring DST gap normalizes forward. */
     #ifdef _WIN32
     _putenv("TZ=EST5EDT");_tzset();
     #else
     setenv("TZ","EST5EDT",1);tzset();
     #endif
+    c.day_mode=0;tracking_day(&c,at(2026,3,8,12,0,0),&begin,&finish);assert(finish-begin==23*3600);
+    tracking_day(&c,at(2026,11,1,12,0,0),&begin,&finish);assert(finish-begin==25*3600);
     c.reset_day=8;c.reset_minute=150;
     time_t now=at(2026,3,8,12,0,0);assert(cycle_start(&c,now)<=now);assert(cycle_next(&c,now)>now);
     puts("PASS: clocks, overnight schedules, exact byte splits, counter resets, month ends, leap year, DST");return 0;
