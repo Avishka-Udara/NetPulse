@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <wchar.h>
-enum { ID_START=101,ID_END,ID_PEAK,ID_OFF,ID_DAY,ID_TIME,ID_POSITION,ID_OFFSET,ID_ADAPTER,ID_SAVE,ID_EXPORT,ID_CORRECT_PEAK,ID_CORRECT_OFF,ID_CORRECT,ID_RESET,ID_CLOSE,ID_RESET_TODAY,ID_WIDTH,ID_FONT,ID_THEME,ID_BACKGROUND,ID_TOTALS,ID_STARTUP,ID_ABOUT,ID_MODE,ID_BACKUP_SETTINGS,ID_RESTORE_SETTINGS,ID_BACKUP_DATA,ID_DATA_FOLDER,ID_RETRY,ID_TRACKING,ID_DAY_MODE,ID_DAY_START,ID_DAILY_PEAK,ID_DAILY_OFF,ID_APP_ENABLE,ID_APP_RANGE,ID_APP_DATE,ID_APP_PERIOD,ID_APP_LIST,ID_APP_ALL,ID_APP_PREV,ID_APP_NEXT };
+enum { ID_START=101,ID_END,ID_PEAK,ID_OFF,ID_DAY,ID_TIME,ID_POSITION,ID_OFFSET,ID_ADAPTER,ID_SAVE,ID_EXPORT,ID_CORRECT_PEAK,ID_CORRECT_OFF,ID_CORRECT,ID_RESET,ID_CLOSE,ID_RESET_TODAY,ID_WIDTH,ID_FONT,ID_THEME,ID_BACKGROUND,ID_TOTALS,ID_STARTUP,ID_ABOUT,ID_MODE,ID_BACKUP_SETTINGS,ID_RESTORE_SETTINGS,ID_BACKUP_DATA,ID_DATA_FOLDER,ID_RETRY,ID_TRACKING,ID_DAY_MODE,ID_DAY_START,ID_DAILY_PEAK,ID_DAILY_OFF,ID_APP_ENABLE,ID_APP_RANGE,ID_APP_DATE,ID_APP_PERIOD,ID_APP_LIST,ID_APP_ALL,ID_APP_PREV,ID_APP_NEXT,ID_APP_DETAILS,ID_FORECAST,ID_ALERTS,ID_RETENTION };
 static AdapterChoice choices[MAX_ADAPTERS];static unsigned choice_count;
 static int scale=96,dragging,drag_origin,drag_offset;
 static int px(int n){return MulDiv(n,scale,96);}
@@ -289,7 +289,14 @@ static void settings_fields(HWND w) {
     label(w,L"0 = no budget. Uploads + downloads count. Warnings do not block apps.",32,404,624);
     label(w,L"App budgets cover captured TCP/UDP on all interfaces, excluding loopback.",32,442,624);
     label(w,L"Forecast uses the last 5 minutes; at least 60 seconds of capture is needed.",32,480,624);
-    label(w,L"A display reset preserves history and does not restore your daily budget.",32,518,624);
+    label(w,L"Budget alerts",32,514,280);
+    combo=control(w,L"COMBOBOX",L"",ID_ALERTS,360,506,280,120,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
+    SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Off");SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Quiet notifications");SendMessageW(combo,CB_SETCURSEL,app.config.alerts,0);
+    label(w,L"App history retention",32,546,280);
+    combo=control(w,L"COMBOBOX",L"",ID_RETENTION,360,542,280,150,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
+    const wchar_t *retention[]={L"Keep all history",L"30 days",L"90 days",L"365 days"};for(int i=0;i<4;i++)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)retention[i]);
+    SendMessageW(combo,CB_SETCURSEL,app.config.retention_days==30?1:app.config.retention_days==90?2:app.config.retention_days==365?3:0,0);
+    label(w,L"Retention permanently removes older app history after saving.",32,614,624);
     creating_page=6;
     label(w,L"View",24,188,100);
     combo=control(w,L"COMBOBOX",L"",ID_APP_RANGE,24,210,120,150,WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);
@@ -303,6 +310,8 @@ static void settings_fields(HWND w) {
     control(w,L"BUTTON",L"All apps",ID_APP_ALL,572,210,84,30,WS_TABSTOP);
     control(w,L"LISTBOX",L"",ID_APP_LIST,24,432,632,184,WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT);
     control(w,L"BUTTON",L"Enable app tracking",ID_APP_ENABLE,24,650,210,36,WS_TABSTOP);
+    control(w,L"BUTTON",L"App details",ID_APP_DETAILS,246,650,130,36,WS_TABSTOP);
+    control(w,L"BUTTON",L"Forecast",ID_FORECAST,388,650,120,36,WS_TABSTOP);
     creating_page=3;
     label(w,L"Peak used (GB)",32,238,280);edit(w,ID_CORRECT_PEAK,L"0",40,268,264);
     label(w,L"Off-peak used (GB)",360,238,280);edit(w,ID_CORRECT_OFF,L"0",368,268,264);
@@ -404,6 +413,8 @@ static void save_settings(HWND w) {
     if(c.day_mode==2 && !get_clock(w,ID_DAY_START,&c.day_minute)){validation_error(w,ID_DAY_START,L"Day start: use HH:MM between 00:00 and 23:59.");return;}
     if(!get_number(w,ID_DAILY_PEAK,0,1000000,&c.daily_peak_gb)){validation_error(w,ID_DAILY_PEAK,L"Daily peak budget: enter 0 to 1,000,000 GB.");return;}
     if(!get_number(w,ID_DAILY_OFF,0,1000000,&c.daily_offpeak_gb)){validation_error(w,ID_DAILY_OFF,L"Daily off-peak budget: enter 0 to 1,000,000 GB.");return;}
+    c.alerts=(int)SendDlgItemMessageW(w,ID_ALERTS,CB_GETCURSEL,0,0);
+    const int retention_values[]={0,30,90,365};int retention=(int)SendDlgItemMessageW(w,ID_RETENTION,CB_GETCURSEL,0,0);c.retention_days=retention_values[retention>=0 && retention<4?retention:0];
     c.widget_width=(int)width;c.font_size=(int)font;
     c.theme=(int)SendDlgItemMessageW(w,ID_THEME,CB_GETCURSEL,0,0);
     c.transparent=(int)SendDlgItemMessageW(w,ID_BACKGROUND,CB_GETCURSEL,0,0);
@@ -513,14 +524,16 @@ LRESULT CALLBACK settings_proc(HWND w,UINT m,WPARAM wp,LPARAM lp) {
         case ID_ABOUT:{
             TASKDIALOGCONFIG dialog={0};dialog.cbSize=sizeof(dialog);dialog.hwndParent=w;dialog.hInstance=app.instance;
             dialog.dwFlags=TDF_ENABLE_HYPERLINKS|TDF_ALLOW_DIALOG_CANCELLATION|TDF_SIZE_TO_CONTENT;
-            dialog.dwCommonButtons=TDCBF_CLOSE_BUTTON;dialog.pszWindowTitle=L"About NetPulse";dialog.pszMainInstruction=L"NetPulse 1.3.0 preview";
+            dialog.dwCommonButtons=TDCBF_CLOSE_BUTTON;dialog.pszWindowTitle=L"About NetPulse";dialog.pszMainInstruction=L"NetPulse 1.4.0 preview";
             dialog.pszContent=L"A lightweight, local network monitor.\n\nCreated by <a href=\"https://github.com/avishka-Udara\">Avishka Udara</a>\n\nCustomize your plan, appearance, and taskbar placement in Settings. Usage adjustments let you reset today's display or your billing cycle without deleting history.";
             dialog.pszFooter=L"GNU GPL version 3. Your usage data stays on this device.";dialog.pfCallback=about_callback;
             TaskDialogIndirect(&dialog,NULL,NULL,NULL);break;
         }
         case ID_DAY_MODE:if(HIWORD(wp)==CBN_SELCHANGE)EnableWindow(GetDlgItem(w,ID_DAY_START),SendDlgItemMessageW(w,ID_DAY_MODE,CB_GETCURSEL,0,0)==2);break;
         case ID_APP_RANGE:case ID_APP_PERIOD:if(HIWORD(wp)==CBN_SELCHANGE){analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);}break;
-        case ID_APP_LIST:if(HIWORD(wp)==LBN_SELCHANGE){LRESULT selected=SendDlgItemMessageW(w,ID_APP_LIST,LB_GETCURSEL,0,0);if(selected>=0 && (unsigned)selected<app_row_count)wcscpy(selected_app,app_rows[selected].path);analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);}break;
+        case ID_APP_LIST:if(HIWORD(wp)==LBN_DBLCLK){analytics_details(w);break;}if(HIWORD(wp)==LBN_SELCHANGE){LRESULT selected=SendDlgItemMessageW(w,ID_APP_LIST,LB_GETCURSEL,0,0);if(selected>=0 && (unsigned)selected<app_row_count)wcscpy(selected_app,app_rows[selected].path);analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);}break;
+        case ID_APP_DETAILS:analytics_details(w);break;
+        case ID_FORECAST:analytics_forecast(w);break;
         case ID_APP_ALL:selected_app[0]=0;analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);break;
         case ID_APP_PREV:case ID_APP_NEXT:{SYSTEMTIME date;SendDlgItemMessageW(w,ID_APP_DATE,DTM_GETSYSTEMTIME,0,(LPARAM)&date);struct tm t={0};t.tm_year=date.wYear-1900;t.tm_mon=date.wMonth-1;t.tm_mday=date.wDay;t.tm_hour=12;t.tm_isdst=-1;int delta=LOWORD(wp)==ID_APP_PREV?-1:1;if(SendDlgItemMessageW(w,ID_APP_RANGE,CB_GETCURSEL,0,0)==1){t.tm_mday=1;t.tm_mon+=delta;}else t.tm_mday+=delta;mktime(&t);date.wYear=(WORD)(t.tm_year+1900);date.wMonth=(WORD)(t.tm_mon+1);date.wDay=(WORD)t.tm_mday;SendDlgItemMessageW(w,ID_APP_DATE,DTM_SETSYSTEMTIME,GDT_VALID,(LPARAM)&date);break;}
         case ID_APP_ENABLE:if(tracker_enabled()){app_stop_tracking();app_sample();app_flush();wcscpy(app.tracking_status,L"Tracking paused. Saved history remains available.");}else {app.tracking_since=0;app.tracking_lost=0;if(tracker_start(w))wcscpy(app.tracking_status,L"Starting optional elevated collector...");else wcscpy(app.tracking_status,L"Tracking not enabled. Administrator consent may have been cancelled.");}analytics_refresh(w,1);InvalidateRect(w,NULL,FALSE);break;

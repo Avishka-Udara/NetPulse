@@ -9,7 +9,8 @@ $cc -Os -w -c -DSQLITE_THREADSAFE=0 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_OMIT_L
 x86_64-w64-mingw32-windres -I src src/netpulse.rc -O coff -o build/netpulse.res
 $cc $flags -municode -mwindows -static src/main.c src/collector.c src/core.c src/network.c src/db.c src/settings.c src/ui.c src/taskbar.c src/startup.c build/sqlite3.o build/netpulse.res -o build/NetPulse.exe -s -luser32 -lgdi32 -lshell32 -ladvapi32 -liphlpapi -lcomdlg32 -ldwmapi -lcomctl32 -lole32 -loleaut32 -luuid
 $cc $flags -static tests/test_core.c src/core.c -o build/test_core.exe
-$cc $flags -static tests/test_db.c src/db.c build/sqlite3.o -o build/test_db.exe
+$cc $flags -static tests/test_db.c src/db.c src/core.c build/sqlite3.o -o build/test_db.exe
+$cc $flags -static tests/test_history.c src/db.c src/core.c build/sqlite3.o -o build/test_history.exe
 $cc $flags -static tests/test_network.c src/network.c src/core.c -o build/test_network.exe -liphlpapi
 $cc $flags -static tests/test_placement.c -o build/test_placement.exe
 $cc $flags -static tests/test_settings.c src/settings.c src/core.c -o build/test_settings.exe -ladvapi32

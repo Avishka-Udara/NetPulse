@@ -8,7 +8,8 @@
 App app;
 void app_error(HWND owner,const wchar_t *message){MessageBoxW(owner,message,L"NetPulse",MB_OK|MB_ICONWARNING);}
 int app_flush(void) {
-    app.storage_ok=db_flush(&app.db,GetTickCount64());app.last_flush=GetTickCount64();return app.storage_ok;
+    app.storage_ok=db_flush(&app.db,GetTickCount64());app.last_flush=GetTickCount64();
+    if(app.storage_ok && !tracker_enabled()){free(app.db.apps);app.db.apps=NULL;}return app.storage_ok;
 }
 void app_refresh_usage(void) {
     time_t now=time(NULL);app.cycle=cycle_start(&app.config,now);app.next_cycle=cycle_next(&app.config,now);
@@ -16,11 +17,39 @@ void app_refresh_usage(void) {
     tracking_day(&app.config,now,&app.day_start,&app.day_end);
     if(!db_today(&app.db,app.day_start,app.day_end,&app.today_down,&app.today_up))app.storage_ok=0;
 }
+void app_insights(int force) {
+    ULONGLONG tick=GetTickCount64();if(!force && tick-app.insight_tick<15000)return;app.insight_tick=tick;
+    time_t now=time(NULL);struct tm local=*localtime(&now);app.active_band=is_peak(&app.config,local.tm_hour*60+local.tm_min)?0:1;
+    time_t cut=now-300;if(cut<app.tracking_since)cut=app.tracking_since;if(cut<app.day_start)cut=app.day_start;cut=(cut+59)/60*60;if(cut>now)cut=now;app.recent_cut=cut;
+    app.forecast_end=now;
+    while(app.forecast_end<app.day_end){struct tm t=*localtime(&app.forecast_end);if((is_peak(&app.config,t.tm_hour*60+t.tm_min)?0:1)!=app.active_band)break;app.forecast_end+=60-t.tm_sec;}
+    if(app.forecast_end>app.day_end)app.forecast_end=app.day_end;
+    app.insights_ok=1;
+    for(int band=0;band<2;band++){
+        time_t edges[]={app.day_start,app.day_end};uint64_t d=0,u=0;
+        if(!db_app_series(&app.db,edges,1,band,L"",&d,&u))app.insights_ok=0;app.budget_used[band]=d+u;
+        edges[0]=cut;edges[1]=now+1;if(!db_app_series(&app.db,edges,1,band,L"",&d,&u))app.insights_ok=0;
+        app.observed[band]=(double)period_seconds(&app.config,cut,now,band);app.recent_rate[band]=app.observed[band]>0?(double)(d+u)/app.observed[band]:0;
+        double observed=tracker_enabled() && app.tracking_since && now>=app.tracking_heartbeat && now-app.tracking_heartbeat<=5 && !app.tracking_lost && app.insights_ok?app.observed[band]:0;
+        app.forecast[band]=budget_forecast((band?app.config.daily_offpeak_gb:app.config.daily_peak_gb)*1e9,app.budget_used[band],app.recent_rate[band],observed,band==app.active_band?(double)(app.forecast_end-now):0);
+    }
+    if(!app.config.alerts || !tracker_enabled() || !app.insights_ok || !app.storage_ok || app.tracking_lost || now-app.tracking_heartbeat>5)return;
+    int band=app.active_band;double cap=(band?app.config.daily_offpeak_gb:app.config.daily_peak_gb)*1e9;
+    int level=budget_alert_level(cap,app.budget_used[band],app.forecast[band].state);if(!level)return;
+    /* Claim before delivery, so restart and Explorer retries cannot spam alerts. */
+    if(db_alert_claim(&app.db,app.day_start,band,level,now,900)!=1)return;
+    NOTIFYICONDATAW n={0};n.cbSize=sizeof(n);n.hWnd=app.controller;n.uID=1;n.uFlags=NIF_INFO;n.dwInfoFlags=NIIF_WARNING|NIIF_NOSOUND|NIIF_RESPECT_QUIET_TIME;
+    wcscpy(n.szInfoTitle,L"NetPulse daily budget");
+    swprintf(n.szInfo,256,L"%ls: %ls. Based on captured app traffic; unobserved usage is unknown. Open Applications for details.",band?L"Off-peak":L"Peak",level==8?L"budget reached":level==4?L"may run out before the period ends":level==2?L"90% used":L"75% used");
+    Shell_NotifyIconW(NIM_MODIFY,&n);
+}
 static void poll_apps(void) {
     TrackPacket packet;int result=0;
     for(unsigned i=0;i<256 && (result=tracker_read(&packet))==1;i++){
         if(packet.error){swprintf(app.tracking_status,160,L"Collector error %lu. Enable tracking to retry.",(unsigned long)packet.error);tracker_stop();break;}
-        if(!packet.path[0]){time_t heartbeat=time(NULL);if(!app.tracking_since || !app.tracking_heartbeat || heartbeat-app.tracking_heartbeat>5 || heartbeat<app.tracking_heartbeat)app.tracking_since=heartbeat;app.tracking_heartbeat=heartbeat;app.tracking_lost=packet.lost;wcscpy(app.tracking_status,packet.lost?L"Incomplete capture: events were lost. Forecast unavailable.":L"Tracking TCP/UDP across all interfaces. Loopback excluded.");continue;}
+        if(!packet.path[0]){time_t heartbeat=time(NULL);if(!app.tracking_since || !app.tracking_heartbeat || heartbeat-app.tracking_heartbeat>5 || heartbeat<app.tracking_heartbeat)app.tracking_since=heartbeat;
+            else if(!db_capture_add(&app.db,app.tracking_heartbeat,heartbeat,packet.lost!=0))app.storage_ok=0;
+            app.tracking_heartbeat=heartbeat;app.tracking_lost=packet.lost;wcscpy(app.tracking_status,packet.lost?L"Incomplete capture: events were lost. Forecast unavailable.":L"Tracking TCP/UDP across all interfaces. Loopback excluded.");continue;}
         time_t stamp=(time_t)packet.stamp;if(stamp<0 || stamp>time(NULL)+60)continue;
         Usage usage;usage_split(&app.config,stamp,stamp,packet.down,packet.up,&usage);
         if(app.db.app_count>=APP_PENDING_MAX-1 && !app_flush()){tracker_stop();wcscpy(app.tracking_status,L"App tracking paused: storage backlog is full.");break;}
@@ -62,8 +91,9 @@ void app_sample(void) {
         }while(cursor<now);
     }
     if(app.network_ok){app.last_tick=tick;app.last_time=now;}
-    if(tick-app.last_flush>=60000)app_flush();
+    if(tick-app.last_flush>=60000 && app_flush())if(!db_app_maintain(&app.db,&app.config,now))app.storage_ok=0;
     if(now<previous_cycle || now>=app.next_cycle || now<app.day_start || now>=app.day_end)app_refresh_usage();
+    if(app.config.alerts)app_insights(0);
     ui_attach();
     if(app.widget && IsWindowVisible(app.widget))InvalidateRect(app.widget,NULL,FALSE);
     if(app.settings)PostMessageW(app.settings,WM_APP+10,0,0);

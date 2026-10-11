@@ -26,7 +26,9 @@ cl %COMMON% src\main.c src\collector.c src\core.c src\network.c src\db.c src\set
 if errorlevel 1 exit /b 1
 cl %COMMON% tests\test_core.c src\core.c /Fobuild\ /Febuild\test_core.exe
 if errorlevel 1 exit /b 1
-cl %COMMON% tests\test_db.c src\db.c build\sqlite3.obj /Fobuild\ /Febuild\test_db.exe
+cl %COMMON% tests\test_db.c src\db.c src\core.c build\sqlite3.obj /Fobuild\ /Febuild\test_db.exe
+if errorlevel 1 exit /b 1
+cl %COMMON% tests\test_history.c src\db.c src\core.c build\sqlite3.obj /Fobuild\ /Febuild\test_history.exe
 if errorlevel 1 exit /b 1
 cl %COMMON% tests\test_network.c src\network.c src\core.c /Fobuild\ /Febuild\test_network.exe /link iphlpapi.lib
 if errorlevel 1 exit /b 1
@@ -51,7 +53,9 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "%LLVM%\clang.exe" %COMMON% tests\test_core.c src\core.c -o build\test_core.exe
 if errorlevel 1 exit /b 1
-"%LLVM%\clang.exe" %COMMON% tests\test_db.c src\db.c build\sqlite3.o -o build\test_db.exe
+"%LLVM%\clang.exe" %COMMON% tests\test_db.c src\db.c src\core.c build\sqlite3.o -o build\test_db.exe
+if errorlevel 1 exit /b 1
+"%LLVM%\clang.exe" %COMMON% tests\test_history.c src\db.c src\core.c build\sqlite3.o -o build\test_history.exe
 if errorlevel 1 exit /b 1
 "%LLVM%\clang.exe" %COMMON% tests\test_network.c src\network.c src\core.c -o build\test_network.exe -liphlpapi
 if errorlevel 1 exit /b 1
@@ -69,6 +73,8 @@ if errorlevel 1 exit /b 1
 build\test_core.exe
 if errorlevel 1 exit /b 1
 build\test_db.exe
+if errorlevel 1 exit /b 1
+build\test_history.exe
 if errorlevel 1 exit /b 1
 build\test_network.exe
 if errorlevel 1 exit /b 1

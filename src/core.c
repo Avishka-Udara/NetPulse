@@ -83,3 +83,8 @@ Forecast budget_forecast(double cap,uint64_t used,double rate,double observed,do
     if(rate<0)rate=0;f.projected+=rate*remaining;f.remaining_seconds=rate>0?(cap-used)/rate:0;
     f.state=f.projected>cap?3:2;return f;
 }
+
+int budget_alert_level(double cap,uint64_t used,int state){
+    if(cap<=0)return 0;if((double)used>=cap)return 8;if(state==3)return 4;
+    if((double)used>=cap*0.90)return 2;if((double)used>=cap*0.75)return 1;return 0;
+}

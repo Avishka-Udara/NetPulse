@@ -66,5 +66,38 @@ int main(void) {
     assert(db_apps(&d,0,8000,1,rows,8,&count));uint64_t sum=0;for(unsigned i=0;i<count;i++)sum+=rows[i].down+rows[i].up;assert(sum==50);
     assert(db_app_series(&d,edges,3,-1,L"browser.exe",ds,us));assert(ds[0]==100 && ds[1]==100 && ds[2]==0);
     assert(db_traffic(&d,0,8000,&down,&up));assert(down==0 && up==0);db_close(&d);
+    assert(db_open(&d,L":memory:"));
+    uint64_t observed,impaired;
+    assert(db_capture_add(&d,100,160,0));assert(db_capture_add(&d,160,200,0));assert(d.span_count==1);
+    assert(db_capture_add(&d,180,240,1));assert(db_capture_add(&d,300,360,0));
+    assert(db_capture_coverage(&d,120,330,&observed,&impaired));assert(observed==150 && impaired==60);
+    assert(db_flush(&d,1500));assert(db_capture_add(&d,310,370,0));
+    assert(db_capture_coverage(&d,120,330,&observed,&impaired));assert(observed==150 && impaired==60);
+    assert(db_capture_coverage(&d,240,300,&observed,&impaired));assert(!observed && !impaired);
+    assert(db_alert_claim(&d,86400,0,1,90000,900)==1);assert(db_alert_claim(&d,86400,0,1,92000,900)==0);
+    assert(db_alert_claim(&d,86400,0,2,90899,900)==0);assert(db_alert_claim(&d,86400,0,2,90900,900)==1);
+    assert(db_alert_claim(&d,86400,0,4,90901,900)==0);assert(db_alert_claim(&d,86400,0,8,91800,900)==1);
+    assert(db_alert_claim(&d,86400,0,4,93000,900)==0);assert(db_alert_claim(&d,172800,0,1,180000,900)==1);
+    Config cfg={0};time_t now=time(NULL),day_start,day_end;tracking_day(&cfg,now,&day_start,&day_end);
+    au=(Usage){0};au.down[0]=100;au.up[1]=20;
+    assert(db_app_add(&d,day_start-3600,L"one.exe",&au));assert(db_app_add(&d,day_start-7200,L"two.exe",&au));
+    assert(db_flush(&d,1600));assert(db_app_maintain(&d,&cfg,now));
+    assert(db_apps(&d,day_start-86400,day_end,-1,rows,8,&count));assert(count==2 && rows[0].down==100 && rows[0].up==20);
+    time_t daily[]={day_start-86400,day_start};assert(db_app_series(&d,daily,1,-1,L"",ds,us));assert(ds[0]==200 && us[0]==40);
+    time_t hour[]={day_start-3600,day_start};assert(db_app_series(&d,hour,1,-1,L"",ds,us));assert(ds[0]==100 && us[0]==20);
+    /* Late arrivals invalidate a cached day without double-counting its baseline. */
+    assert(db_app_add(&d,day_start-3600,L"one.exe",&au));assert(db_app_series(&d,daily,1,-1,L"",ds,us));assert(ds[0]==300);
+    assert(db_flush(&d,1700));assert(db_app_maintain(&d,&cfg,now));assert(db_app_series(&d,daily,1,-1,L"",ds,us));assert(ds[0]==300 && us[0]==60);
+    /* A backward clock jump must not summarize an unfinished future day. */
+    assert(db_app_add(&d,day_start-36*3600,L"future.exe",&au));assert(db_flush(&d,1750));
+    assert(db_app_maintain(&d,&cfg,day_start-2*86400+3600));
+    assert(sqlite3_prepare_v2(d.handle,"SELECT count(*) FROM app_summary_days",-1,&check,NULL)==SQLITE_OK);assert(sqlite3_step(check)==SQLITE_ROW);assert(sqlite3_column_int(check,0)==1);sqlite3_finalize(check);
+    cfg.day_mode=2;cfg.day_minute=330;assert(db_app_maintain(&d,&cfg,now));assert(db_app_series(&d,daily,1,-1,L"",ds,us));assert(ds[0]==300 && us[0]==60);
+    assert(db_app_add(&d,day_start-40*86400,L"old.exe",&au));assert(db_add(&d,day_start-40*86400,&au));assert(db_flush(&d,1800));
+    assert(db_capture_add(&d,day_start-40*86400,now,0));assert(db_flush(&d,1900));
+    cfg.retention_days=30;assert(db_app_maintain(&d,&cfg,now));assert(db_apps(&d,0,day_start-31*86400,-1,rows,8,&count));assert(!count);
+    assert(db_capture_coverage(&d,0,day_start-31*86400,&observed,&impaired));assert(!observed);
+    assert(db_traffic(&d,0,day_start-31*86400,&down,&up));assert(down==100 && up==20);
+    db_close(&d);
     puts("PASS: persistence, recovery, exact 128 MiB down / 16 MiB up across restart, midnight and corrections");return 0;
 }

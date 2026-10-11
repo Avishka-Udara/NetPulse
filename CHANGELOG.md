@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0 (preview)
+
+- Show elapsed-range capture coverage and event-loss status; preserve gaps as unknown usage.
+- Add application icons, executable details, daily comparison and a forecast details view.
+- Add optional quiet budget alerts with persistent thresholds and a per-band cooldown.
+- Add unlimited/30/90/365-day app-history retention and exact daily summary caches.
+- Add large-history, event-burst and sustained live-capture tests; optionally measure collector resources alongside the main process.
+
+
 ## 1.3.0
 
 - Add optional elevated TCP/UDP per-app capture with a restricted local pipe and graceful shutdown.

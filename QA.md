@@ -35,3 +35,14 @@ Run native/SQL/startup tests and check clean install, upgrade, uninstall, data p
 - Test midnight, peak-start and custom starts, overnight bands, short months and DST. A manual display reset must not clear app history or replenish budgets.
 - Try zero, small, exhausted and large daily budgets. Confirm warning-only behavior, minimum observation window, zero-traffic decay, time-to-exhaustion, and high-contributor labels. Disabled capture, stale heartbeats and event loss must not produce confident forecasts.
 - Stop capture and exit the UI; verify the helper and its private ETW session disappear. Repeat under load, storage failure, suspend/resume and forced parent termination.
+
+## Coverage, alerts and history
+
+- Disable capture for part of a day, restart, and inspect daily/monthly coverage. Missing spans must never become zero-traffic evidence. Check overlapping spans/clock rollback and event-loss indicators.
+- Choose App details for an executable and inspect its full path, partial-today/full-yesterday labels and capture percentages. Icons must not trigger network access; keyboard focus must remain visible.
+- Enable quiet alerts with a small test budget. Check 75%, 90%, forecast-risk and exhausted precedence, the 15-minute per-band cooldown, restart persistence, next-day reset and Windows quiet-time suppression. Do not change OS notification permissions for this test.
+- Reduce retention only in a disposable profile. Confirm old app rows/coverage disappear while adapter/billing history remains. Switch day boundaries, add late data, and compare cached and uncached totals.
+- `build/test_history.exe` generates 276,480 deterministic rows across 128 apps and 90 days, checks monthly charts, retention and database integrity, then removes its own temporary database. It never uses the real profile.
+- `build/test_etw.exe` includes a million-event aggregation burst and bounded-queue overflow test. This is a callback fixture, not a live throughput claim.
+- `build/test_capture.exe --seconds 120` runs repeated public-header downloads for two minutes (maximum accepted duration 600 seconds), drains capture continuously and verifies attributed totals/loss/stop. This consumes network data and may request UAC for its helper.
+- Resource measurement accepts `-IncludeCollector` to include the selected process's collector child. Record both process count and aggregate CPU/memory. Longer 60-minute and multi-day runs remain release acceptance work.

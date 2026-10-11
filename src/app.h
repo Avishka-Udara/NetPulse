@@ -13,6 +13,8 @@ typedef struct {
     time_t last_time,cycle,next_cycle,day_start,day_end; ULONGLONG last_tick,last_flush;
     uint64_t today_down,today_up;
     time_t tracking_since,tracking_heartbeat;uint64_t tracking_lost;wchar_t tracking_status[160];
+    uint64_t budget_used[2];double recent_rate[2],observed[2];Forecast forecast[2];
+    time_t forecast_end,recent_cut;int active_band,insights_ok;ULONGLONG insight_tick;
     double down_rate,up_rate; int dark,quitting,storage_ok,network_ok,attached;
     UINT taskbar_created; HFONT font,small_font; HBRUSH background;
     COLORREF bg,fg,muted,accent; HICON icon;
@@ -28,6 +30,7 @@ void app_sample(void);
 void app_stop_tracking(void);
 int app_flush(void);
 void app_refresh_usage(void);
+void app_insights(int force);
 void app_error(HWND owner,const wchar_t *message);
 void ui_theme(void);
 void ui_attach(void);

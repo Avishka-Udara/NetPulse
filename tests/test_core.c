@@ -5,6 +5,7 @@
 #include <stdlib.h>
 static time_t at(int y,int m,int d,int h,int min,int s){struct tm t={0};t.tm_year=y-1900;t.tm_mon=m-1;t.tm_mday=d;t.tm_hour=h;t.tm_min=min;t.tm_sec=s;t.tm_isdst=-1;return mktime(&t);}
 int main(void) {
+    assert(budget_alert_level(1000,749,2)==0);assert(budget_alert_level(1000,750,2)==1);assert(budget_alert_level(1000,900,2)==2);assert(budget_alert_level(1000,500,3)==4);assert(budget_alert_level(1000,1000,1)==8);assert(!budget_alert_level(0,1000,3));
     assert(proportional_bytes(UINT64_MAX,1,2)==UINT64_MAX/2);
     assert(proportional_bytes(UINT64_MAX,UINT64_MAX-1,UINT64_MAX)==UINT64_MAX-1);
     assert(proportional_bytes(UINT64_MAX-1,UINT64_MAX-2,UINT64_MAX)==UINT64_MAX-3);

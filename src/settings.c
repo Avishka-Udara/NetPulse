@@ -23,6 +23,8 @@ int settings_load(void) {
     c->peak_gb=read_cap(L"peak_gb",100);c->offpeak_gb=read_cap(L"offpeak_gb",100);
     c->day_mode=GetPrivateProfileIntW(L"plan",L"day_mode",0,app.ini);if(c->day_mode<0 || c->day_mode>2)c->day_mode=0;
     c->day_minute=read_clock(L"day_start",0);c->daily_peak_gb=read_cap(L"daily_peak_gb",0);c->daily_offpeak_gb=read_cap(L"daily_offpeak_gb",0);
+    c->alerts=GetPrivateProfileIntW(L"plan",L"alerts",0,app.ini)!=0;
+    c->retention_days=GetPrivateProfileIntW(L"plan",L"retention_days",0,app.ini);if(c->retention_days!=0 && c->retention_days!=30 && c->retention_days!=90 && c->retention_days!=365)c->retention_days=0;
     c->position=GetPrivateProfileIntW(L"widget",L"position",2,app.ini);if(c->position<0 || c->position>2)c->position=2;
     c->offset=(int)GetPrivateProfileIntW(L"widget",L"offset",0,app.ini);if(c->offset < -5000 || c->offset>5000)c->offset=0;
     c->widget_width=GetPrivateProfileIntW(L"widget",L"width",136,app.ini);if(c->widget_width<136 || c->widget_width>320)c->widget_width=136;
@@ -37,8 +39,8 @@ int settings_load(void) {
 int settings_save(const Config *c) {
     wchar_t temp[MAX_PATH];swprintf(temp,MAX_PATH,L"%ls.tmp",app.ini);
     FILE *f=_wfopen(temp,L"wb");if(!f)return 0;
-    int n=fprintf(f,"[plan]\r\npeak_start=%02d:%02d\r\npeak_end=%02d:%02d\r\npeak_gb=%.9g\r\noffpeak_gb=%.9g\r\nreset_day=%d\r\nreset_time=%02d:%02d\r\nday_mode=%d\r\nday_start=%02d:%02d\r\ndaily_peak_gb=%.9g\r\ndaily_offpeak_gb=%.9g\r\n[widget]\r\nposition=%d\r\noffset=%d\r\nwidth=%d\r\nfont_size=%d\r\ntheme=%d\r\ntransparent=%d\r\nshow_totals=%d\r\ntray_only=%d\r\n[network]\r\nadapter=%llu\r\n",
-        c->peak_start/60,c->peak_start%60,c->peak_end/60,c->peak_end%60,c->peak_gb,c->offpeak_gb,c->reset_day,c->reset_minute/60,c->reset_minute%60,c->day_mode,c->day_minute/60,c->day_minute%60,c->daily_peak_gb,c->daily_offpeak_gb,c->position,c->offset,c->widget_width,c->font_size,c->theme,c->transparent,c->show_totals,c->tray_only,(unsigned long long)c->adapter);
+    int n=fprintf(f,"[plan]\r\npeak_start=%02d:%02d\r\npeak_end=%02d:%02d\r\npeak_gb=%.9g\r\noffpeak_gb=%.9g\r\nreset_day=%d\r\nreset_time=%02d:%02d\r\nday_mode=%d\r\nday_start=%02d:%02d\r\ndaily_peak_gb=%.9g\r\ndaily_offpeak_gb=%.9g\r\nalerts=%d\r\nretention_days=%d\r\n[widget]\r\nposition=%d\r\noffset=%d\r\nwidth=%d\r\nfont_size=%d\r\ntheme=%d\r\ntransparent=%d\r\nshow_totals=%d\r\ntray_only=%d\r\n[network]\r\nadapter=%llu\r\n",
+        c->peak_start/60,c->peak_start%60,c->peak_end/60,c->peak_end%60,c->peak_gb,c->offpeak_gb,c->reset_day,c->reset_minute/60,c->reset_minute%60,c->day_mode,c->day_minute/60,c->day_minute%60,c->daily_peak_gb,c->daily_offpeak_gb,c->alerts,c->retention_days,c->position,c->offset,c->widget_width,c->font_size,c->theme,c->transparent,c->show_totals,c->tray_only,(unsigned long long)c->adapter);
     int ok=n>0;if(fclose(f)!=0)ok=0;
     if(ok)ok=MoveFileExW(temp,app.ini,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
     if(!ok)DeleteFileW(temp);return ok;

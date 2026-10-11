@@ -12,6 +12,7 @@ Created by [Avishka Udara](https://github.com/avishka-Udara). Free software unde
 - **Compact visibility:** a transparent, customizable taskbar widget with live speeds and daily totals. A tray fallback keeps tracking available when space cannot be verified.
 - **Resets without losing history:** reset today's display or the billing cycle independently while preserving the original traffic ledger.
 - **Native and local:** C11, Win32/GDI, and SQLite. No embedded browser, background server, account, analytics, or cloud storage.
+- **Visible capture gaps:** per-app history, daily budgets and forecasts with capture coverage, so unobserved time is distinguishable from recorded zero traffic.
 - **Inspectable accounting:** integer byte counters, explicit adapter selection, regression tests, matching source archives, and documented measurement limits.
 
 ## Techniques behind it
@@ -20,7 +21,8 @@ Created by [Avishka Udara](https://github.com/avishka-Udara). Free software unde
 | --- | --- |
 | Measurement | Windows IP Helper 64-bit counters, identity-based adapter tracking, per-direction reset handling, and physical/default-route filtering |
 | Time allocation | Exact, overflow-safe integer proportional allocation; the remainder stays in the final segment so bytes are conserved |
-| Persistence | SQLite WAL, minute buckets, batched transactions, a bounded retry backlog, and incremental totals |
+| Persistence | SQLite WAL, minute buckets, batched transactions, a bounded retry backlog, exact daily summary caches, and incremental totals |
+| App insights | Optional ETW helper, heartbeat coverage intervals, recent-rate forecasts, and persistent alert cooldowns |
 | Placement | Separate accessibility worker, Explorer-scoped layout events, one-second throttling, 15-second periodic fallback, conservative gap selection |
 | Rendering | Reusable widget back buffer, cached fonts, native keyboard-accessible controls, and repositioning only when geometry changes |
 | Privacy | Local files only; monitoring needs no outgoing request. Opening the developer link is an explicit user action |
@@ -48,15 +50,31 @@ Forecasts use the recent five-minute average for the active time band, require a
 
 Per-app totals remain separate from adapter counters to avoid adding the same traffic twice. App identity uses the executable path and validates process lifetime against event time; unresolved processes stay explicitly grouped. Retransmit and copy events are excluded. Browser tabs sharing an executable are grouped together. Paths and byte counts remain in the local database and its backups.
 
+### Capture confidence and app details
+
+The Applications page reports the percentage of the elapsed selected range observed by the collector. Paused periods, sleep and missing heartbeats remain **unknown usage**, not zero. History collected before coverage recording was introduced has unknown coverage. Event loss is highlighted; affected session forecasts are disabled. Coverage is collector availability, not proof that Windows or your provider measured every byte.
+
+Select an application to see its daily/hourly trend, then choose **App details** for its executable path, selected-range total, today-so-far versus the previous full tracking day, and both days' capture coverage. Local executable icons are cached with a fixed limit; network paths and shell extensions are not loaded for decoration.
+
+**Forecast** shows remaining allowance from captured usage, the recent average, the sustainable average until the current period ends, and a projected exhaustion time. These estimates include upload and download. They cannot account for other devices or traffic while capture was disabled.
+
+### Optional alerts and history retention
+
+In **Daily budgets**, choose **Quiet notifications** to enable Windows notifications at 75%, 90%, projected exhaustion, and budget reached. Alerts are off by default, request no sound, respect Windows quiet time, and run with the settings window closed. There is a 15-minute cooldown per time band. Higher-severity alerts supersede lower ones; each level is claimed once per tracking day and band, persisted across restart. Windows may suppress delivery, and suppressed alerts are not retried. Changing a cap does not reset that day's alert claims.
+
+App history defaults to **Keep all history**. Optional 30/90/365-day retention keeps that many completed local tracking days plus the current day and permanently removes older app traffic and coverage after saving. It does not delete adapter totals, billing corrections or daily display resets. Back up history before reducing retention; switching back to unlimited cannot restore deleted records. Settings backups include this preference.
+
+Completed tracking days are cached in SQLite in small batches. Monthly charts use whole-day summaries; partial-day and changed-boundary queries retain minute-level precision. Late arrivals invalidate and rebuild the affected cache. Retention reuses freed database pages; it does not force an expensive file-shrinking operation during monitoring.
+
 ## Install and run
 
-**Version 1.3.0 is an unsigned Windows release candidate.** Windows 10/11 x64 is the current target. macOS/Linux are planned ports, not supported builds.
+**Version 1.4.0 is an unsigned Windows release candidate.** Windows 10/11 x64 is the current target. macOS/Linux are planned ports, not supported builds.
 
 | Package | Purpose |
 | --- | --- |
-| `NetPulse-1.3.0-windows-x64-setup.exe` | Per-user installer, Start menu entry, upgrades and uninstall; no administrator rights required |
+| `NetPulse-1.4.0-windows-x64-setup.exe` | Per-user installer, Start menu entry, upgrades and uninstall; no administrator rights required |
 | `NetPulse-windows-x64.zip` | Portable app; extract before running |
-| `NetPulse-1.3.0-source.zip` | Matching GPL source and build scripts |
+| `NetPulse-1.4.0-source.zip` | Matching GPL source and build scripts |
 | `SHA256SUMS.txt` | Package checksums |
 
 Published binaries belong in [GitHub Releases](https://github.com/Avishka-Udara/NetPulse/releases). A source push does not itself create a release. Successful [CI runs](https://github.com/Avishka-Udara/NetPulse/actions) also produce artifacts.
@@ -85,8 +103,8 @@ Only one instance runs at a time. A normal second launch opens the existing sett
 | Taskbar | Position preference, fine offset, adapter, Windows startup |
 | Adjust usage | Provider-aligned cycle totals, cycle reset, daily-display reset |
 | Appearance | Theme, background, width, text size, display details, and taskbar or tray-only mode |
-| Applications | Day/month charts, app ranking, period filters, optional collector, and live budget cautions |
-| Daily budgets | Midnight/peak/custom day start and separate daily peak/off-peak allowances |
+| Applications | Day/month charts, app ranking/icons/details, coverage, period filters, optional collector, and forecast details |
+| Daily budgets | Midnight/peak/custom day start, daily allowances, quiet alerts, and app-history retention |
 | Manage | Export/restore settings, consistent history snapshots, open data folder, retry saving |
 
 Both directions count toward the plan. Units are decimal: 1 GB = 1,000,000,000 bytes. K/M/G mean KB/MB/GB; `/s` identifies speed. Equal peak times mean all-day peak; overnight ranges work, zero allowance means unlimited, and reset days 29-31 clamp to shorter months. Scheduling follows Windows local time and daylight-saving rules.
@@ -159,6 +177,6 @@ NetPulse is **GPL-3.0-only**. Distribute matching source with binaries and prese
 
 ## Release automation and extended checks
 
-Pushing a tag matching the installer version (for example `v1.3.0`) runs tests and creates a **draft** GitHub release with installer, portable ZIP, corresponding source, checksums, and generated notes. It does not publish automatically or provide code signing. Review [QA.md](QA.md) before publishing.
+Pushing a tag matching the installer version (for example `v1.4.0`) runs tests and creates a **draft** GitHub release with installer, portable ZIP, corresponding source, checksums, and generated notes. It does not publish automatically or provide code signing. Review [QA.md](QA.md) before publishing.
 
 For longer measurements, run `tools/measure-resources.ps1 -ProcessId <id> -Minutes 60 -OutputPath samples.csv`. The script only observes the selected NetPulse process. User-reported memory below 10 MB is plausible for a different memory metric/environment; it is not presented as a universal guarantee.

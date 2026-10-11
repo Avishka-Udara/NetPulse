@@ -5,10 +5,10 @@ App app;
 int main(void) {
     assert(GetTempFileNameW(L"build",L"nps",0,app.ini));
     assert(settings_load());assert(app.config.widget_width==136 && app.config.font_size==11 && app.config.transparent==1);
-    Config c=app.config;c.day_mode=2;c.day_minute=317;c.daily_peak_gb=2.5;c.daily_offpeak_gb=4.25;c.tray_only=1;c.widget_width=220;c.font_size=15;c.theme=2;c.transparent=0;c.show_totals=0;c.offset=-250;c.position=0;c.peak_start=317;
+    Config c=app.config;c.alerts=1;c.retention_days=90;c.day_mode=2;c.day_minute=317;c.daily_peak_gb=2.5;c.daily_offpeak_gb=4.25;c.tray_only=1;c.widget_width=220;c.font_size=15;c.theme=2;c.transparent=0;c.show_totals=0;c.offset=-250;c.position=0;c.peak_start=317;
     assert(settings_save(&c));assert(settings_load());
     assert(app.config.widget_width==220 && app.config.font_size==15 && app.config.theme==2 && app.config.transparent==0 && app.config.show_totals==0);
-    assert(app.config.tray_only==1);assert(app.config.day_mode==2 && app.config.day_minute==317 && app.config.daily_peak_gb==2.5 && app.config.daily_offpeak_gb==4.25);
+    assert(app.config.alerts==1 && app.config.retention_days==90);assert(app.config.tray_only==1);assert(app.config.day_mode==2 && app.config.day_minute==317 && app.config.daily_peak_gb==2.5 && app.config.daily_offpeak_gb==4.25);
     wchar_t backup[MAX_PATH];assert(GetTempFileNameW(L"build",L"npb",0,backup));
     assert(settings_export(backup));Config imported;Config before=app.config;assert(settings_import(backup,&imported));
     assert(imported.tray_only==1 && imported.widget_width==220 && imported.peak_start==317);assert(app.config.widget_width==before.widget_width);

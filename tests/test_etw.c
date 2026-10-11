@@ -12,5 +12,13 @@ int main(void){
     e.EventHeader.EventDescriptor.Opcode=27;on_event(&e);assert(queue[0].down==200);
     e.UserDataLength=4;on_event(&e);assert(lost==1 && queue[0].down==200);
     e.UserDataLength=64;e.EventHeader.EventDescriptor.Opcode=10;bytes[8]=127;on_event(&e);assert(queue[0].up==200);
+    bytes[8]=8;e.EventHeader.EventDescriptor.Opcode=11;
+    uint64_t baseline=queue[0].down;ULONGLONG start=GetTickCount64();
+    for(unsigned i=0;i<1000000;i++)on_event(&e);
+    assert(queued==1 && queue[0].down==baseline+100000000ULL);
+    printf("ETW aggregation: 1,000,000 events in %llu ms, one queue entry\n",(unsigned long long)(GetTickCount64()-start));
+    /* Distinct minutes saturate the queue predictably; overflow is explicit. */
+    for(unsigned i=0;i<QUEUE_SIZE+5;i++){e.EventHeader.TimeStamp.QuadPart+=600000000LL;on_event(&e);}
+    assert(queued==QUEUE_SIZE && lost==7);
     puts("PASS: ETW payload PID, TCP/UDP v4/v6, direction, retransmit exclusion, truncated payload and loopback");return 0;
 }
