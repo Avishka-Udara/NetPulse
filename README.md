@@ -11,9 +11,162 @@ Created by [Avishka Udara](https://github.com/avishka-Udara). Free software unde
 - **Your plan, your rules:** overnight peak/off-peak windows, separate allowances, configurable monthly resets, and manual adjustments.
 - **Compact visibility:** a transparent, customizable taskbar widget with live speeds and daily totals. A tray fallback keeps tracking available when space cannot be verified.
 - **Resets without losing history:** reset today's display or the billing cycle independently while preserving the original traffic ledger.
-- **Native and local:** C11, Win32/GDI, and SQLite. No embedded browser, background server, account, analytics, or cloud storage.
+- **Native and local:** C11, Win32/GDI, and SQLite. No embedded browser, background server, account, telemetry, or cloud storage.
 - **Visible capture gaps:** per-app history, daily budgets and forecasts with capture coverage, so unobserved time is distinguishable from recorded zero traffic.
 - **Inspectable accounting:** integer byte counters, explicit adapter selection, regression tests, matching source archives, and documented measurement limits.
+
+## Why use NetPulse?
+
+NetPulse helps you answer three everyday questions: **How fast is my connection being used? How much of my plan have I used? Which applications are using the data?** It is useful for capped connections, separate peak/off-peak allowances, background downloads, and checking whether your current usage pace fits your daily budget.
+
+| What you need | Feature to use | Where to find it |
+| --- | --- | --- |
+| Watch upload/download without opening a window | Live taskbar speeds and today's totals | Taskbar widget |
+| Match your provider's schedule | Custom peak/off-peak hours and monthly reset | Data plan |
+| Find applications consuming data | Ranked app list, filters, and usage charts | Applications |
+| Compare an app's recorded activity | App details and day/month navigation | Applications |
+| Start “today” at your plan's boundary | Midnight, peak-start, or custom tracking day | Daily budgets |
+| Plan the remaining daily allowance | Daily budgets, forecasts, and contributor cautions | Daily budgets / Applications |
+| Receive occasional budget warnings | Optional quiet notifications | Daily budgets |
+| Correct the displayed billing-cycle total | Manual usage adjustments | Adjust usage |
+| Start a fresh daily display without deleting history | Reset today only | Adjust usage |
+| Reduce taskbar work or visual clutter | Tray-only mode | Appearance |
+| Keep or limit old app records | Configurable app-history retention | Daily budgets |
+| Save a copy of your configuration or history | Settings export and database backup | Manage |
+
+NetPulse measures this computer. It cannot recover traffic from before monitoring began, measure other devices on your router, or guarantee a match with your provider's bill. Budgets and cautions help you decide what to pause or reschedule; they do not block applications or throttle their connections.
+
+## Features and functions
+
+### 1. Live taskbar speeds and daily totals
+
+See download and upload speeds separately, alongside the amount downloaded and uploaded during the current tracking day. This makes an unexpected transfer visible while you work. In **Appearance > Display**, choose **Live speeds only** or **Live speeds and today's totals**. Click the widget or tray icon to open settings; right-click for the menu.
+
+### 2. Daily and billing-cycle overview
+
+**Overview** brings together today's download/upload, current speeds, peak/off-peak cycle usage, remaining plan allowances, and the next reset. Use it to check overall consumption before opening the more detailed app view. **Tracking details** identifies the monitored interfaces, session start, and whether today's display was reset.
+
+### 3. Custom peak and off-peak plans
+
+In **Data plan**, set **Peak starts**, **Peak ends**, and separate allowances. Off-peak automatically covers the remaining hours. Time controls offer half-hour presets and accept a typed `HH:MM`, so a plan starting at `07:15` is supported. Overnight windows work; equal start and end times mean all-day peak. A monthly allowance of `0` means unlimited.
+
+Both uploads and downloads count. Changing peak hours affects future samples; existing records retain their original peak/off-peak classification.
+
+### 4. Monthly reset scheduling
+
+Choose **Monthly reset day** and **Reset time** in **Data plan** to match your billing cycle. Days 29–31 clamp to the last available day in shorter months. The reset starts a new displayed cycle while preserving historical traffic. Changing this schedule changes the date range used to calculate the current cycle.
+
+### 5. Network adapter selection
+
+**Taskbar > Network adapter** defaults to physical adapters with a default route. Choose a specific listed interface when you need to monitor one connection, such as Ethernet instead of Wi-Fi. Adapter identities are tracked so repeated samples are not added twice; independent counter resets are handled per direction.
+
+This choice controls adapter-based totals. The optional app collector has a separate, all-interface scope; selecting an adapter does not filter per-app history.
+
+### 6. Taskbar placement and crowded-layout handling
+
+Choose **Far left**, **Center (nearest free space)**, or **Right (beside system tray)** in **Taskbar**. Adjust **Fine offset (pixels)** or Ctrl-drag the widget for finer positioning. Placement remains subject to detected free space.
+
+When the preferred position is occupied, NetPulse looks for a suitable gap. If space cannot be verified, it falls back to the tray instead of deliberately covering taskbar buttons. Monitoring continues. Integration targets the primary taskbar and depends on Explorer's layout; see the compatibility limits below.
+
+### 7. Theme, transparency, and display size
+
+**Appearance** offers **Follow Windows**, **Light**, and **Dark** themes; **Solid** or **Transparent** widget backgrounds; a configurable width; and adjustable text size. Follow Windows uses the system theme for the widget and the app theme for settings. Larger text can require a wider widget to keep values readable.
+
+### 8. Tray-only mode
+
+Choose **Appearance > Run mode > Tray only (lower overhead)** and save to remove the embedded widget and pause its placement work. Network sampling and history storage continue. This is useful when you prefer an uncluttered taskbar or do not need constantly visible speeds. A fresh tray-only launch avoids initializing the taskbar accessibility worker; libraries loaded earlier in a session may remain in memory until restart.
+
+### 9. Start with Windows
+
+Set **Taskbar > Start with Windows > On - at sign-in** and save to launch NetPulse quietly when you sign in. Windows Startup Apps can independently disable startup. If you move a portable executable, re-enable this setting from its new location.
+
+This starts the normal monitor. It does not automatically enable the elevated app collector; app tracking must be enabled again after each NetPulse restart.
+
+### 10. Individual application usage
+
+In **Applications**, choose **Enable app tracking** to start the optional Windows ETW collector. Windows may ask for administrator consent. The helper records TCP/UDP byte totals by executable; the main UI retains its existing permissions. **Stop app tracking** pauses new capture and preserves saved history.
+
+The ranked list separates download and upload and helps identify background transfers, synchronization tools, or large downloads. It uses executable paths to distinguish applications, caches available local icons, and keeps unresolved processes explicitly grouped. Browser tabs and subprocesses sharing an executable path are grouped together.
+
+App capture covers all interfaces except loopback. LAN transfers and VPN topology can affect the numbers. It does not inspect packet contents or store remote addresses. Earlier adapter totals cannot be assigned to individual applications retroactively.
+
+### 11. Day and month charts
+
+Choose **Day** for hourly bars or **Month** for daily bars, select a date, and move backward or forward with **<** and **>**. The **Traffic** filter selects **All traffic**, **Peak**, or **Off-peak**. Blue represents download; teal represents upload.
+
+Select an application to chart its usage, or choose **All apps** to return to the combined view. Charts follow your configured tracking-day boundary, making it easier to compare activity using your plan's definition of a day.
+
+### 12. App details and daily comparisons
+
+Select an application and choose **App details**, or double-click its row. The dialog shows the selected chart-range total, today's recorded usage so far, the previous full tracking day's usage, and capture coverage for both days. Expand **Technical details** to see the executable path.
+
+The daily comparison uses all traffic. Today is a partial day, while the previous day is a full tracking-day interval; differences in capture coverage also affect the comparison. Use the chart and coverage together before concluding that an app's behavior changed.
+
+### 13. Capture coverage and event-loss indicators
+
+The Applications page shows whether capture is active or paused and what percentage of the selected elapsed range was observed. Gaps remain **unknown usage**, not evidence of zero traffic. History recorded before coverage tracking was introduced has unknown coverage.
+
+Event loss is highlighted and disables rate-based forecasts for the affected capture session. **Forecast > Technical details** shows the continuous-capture start, last heartbeat, and reported lost events/buffers. Coverage describes collector availability, not a guarantee that every billable byte was measured.
+
+### 14. Custom tracking-day start
+
+In **Daily budgets > Start a tracking day**, choose **Midnight (00:00)**, **Peak time starts**, or **Custom time**. The custom time accepts `HH:MM`. For example, a day beginning at `08:00` runs until the following day's `08:00`, rather than resetting at midnight.
+
+This boundary controls today's totals, app-history day views, and daily budgets. The monthly billing reset remains a separate setting.
+
+### 15. Daily budgets, forecasts, and contributor cautions
+
+Set **Daily peak budget (GB)** and **Daily off-peak budget (GB)** in **Daily budgets**. A value of `0` disables that budget. These allowances apply to captured app uploads plus downloads and are separate from the monthly adapter-based plan.
+
+In **Applications > Forecast**, inspect remaining allowance from recorded usage, the recent average speed, the sustainable average until the period ends, and the projected exhaustion time. The forecast uses up to five minutes of recent activity, including idle time within the active band, and needs at least 60 seconds of eligible capture. It projects until the current band ends or the tracking day resets, whichever comes first.
+
+When the budget is at risk or reached, applications contributing at least 5% of the recent rate receive a **High contributor** caution. This helps you decide which download or synchronization job to pause or move to off-peak hours. Forecasts are estimates: changing workloads, other devices, and unobserved traffic can change the actual remaining allowance.
+
+### 16. Optional quiet budget notifications
+
+Choose **Daily budgets > Budget alerts > Quiet notifications** for warnings at 75%, 90%, projected exhaustion, and budget reached. Alerts are off by default. They request no sound, respect Windows quiet time, and work while the settings window is closed, provided app tracking is active.
+
+A 15-minute cooldown applies per time band. Higher-severity alerts supersede lower ones, and each level is claimed once per tracking day and band across restarts. Windows may suppress delivery; suppressed alerts are not retried. Changing a cap does not reset that day's alert claims.
+
+### 17. Manual corrections and usage resets
+
+**Adjust usage** provides three different actions:
+
+| Action | What it changes | What it preserves |
+| --- | --- | --- |
+| **Apply totals** | Replaces the displayed current-cycle peak/off-peak usage with the entered GB amounts | Raw traffic, today's traffic, and app history |
+| **Reset cycle usage** | Sets current-cycle displayed peak/off-peak totals to zero | Historical traffic and today's traffic |
+| **Reset today only** | Starts today's displayed download/upload totals from zero | Raw traffic, billing-cycle totals, app history, and daily budgets |
+
+Use **Apply totals** when you want to align the displayed cycle usage with your provider's meter. It records an adjustment; it does not calibrate future measurements. Neither display reset restores a daily app allowance or deletes the underlying history.
+
+### 18. App-history retention and faster long-term views
+
+Choose **Keep all history**, **30 days**, **90 days**, or **365 days** under **Daily budgets > App history retention**. Unlimited retention is the default. A finite choice retains that many completed local tracking days plus the current day.
+
+After saving, retention permanently removes older app traffic and coverage during maintenance. Adapter totals, billing corrections, and daily display resets remain intact. Back up history before reducing retention; choosing unlimited later cannot restore deleted records.
+
+Completed days are cached in small SQLite batches to speed up longer views. Partial-day queries retain minute-level precision, and late arrivals invalidate the affected cache. Freed database pages can be reused; retention does not force an expensive file-shrinking operation during monitoring.
+
+### 19. CSV export, settings backup, and history snapshots
+
+Use **Overview > Export history...** to export the adapter traffic ledger and cycle corrections as CSV. This CSV is not a per-app export, and daily display resets do not rewrite its raw traffic records.
+
+In **Manage**, **Export settings...** saves plan, budget, retention, taskbar, and appearance preferences. **Restore settings...** loads those preferences without changing Windows startup registration or importing traffic history. Restoring a finite retention preference can subsequently prune existing app history, so review the backup's policy before restoring it.
+
+**Back up history...** creates a consistent SQLite snapshot, including committed WAL data and per-app history. **Open data folder** reveals the local files. **Retry saving** retries pending writes after a storage problem has been resolved. For recovery, exit NetPulse and preserve the existing files before replacing the database with a known-good backup.
+
+### 20. Local storage, help, and keyboard navigation
+
+Usage records and settings stay on your computer. There is no account, cloud upload, or monitoring telemetry. The top-right **?** opens Help and About, including the developer link and license information.
+
+Mouse interaction suppresses decorative focus boxes while keyboard navigation retains focus indicators. Settings show validation feedback, indicate unsaved changes, and offer a discard confirmation when closing with pending edits. Use **Save settings** to apply configuration changes.
+
+## New in the 1.4.0 preview
+
+This update adds capture coverage, app icons and detail dialogs, daily comparisons, a detailed forecast view, optional quiet alerts, configurable app-history retention, and cached daily summaries. Background forecast queries are skipped when alerts are off and the analytics pages are closed. Capture buffers are released after tracking stops and pending data is successfully saved.
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and [VALIDATION.md](VALIDATION.md) for test evidence and remaining manual checks. A source update is not automatically a published GitHub release.
 
 ## Techniques behind it
 
@@ -37,34 +190,6 @@ flowchart LR
     E[Explorer layout events] --> P[Background placement worker]
     P --> U
 ```
-
-## Per-app usage and daily budgets
-
-**Applications** shows recorded TCP/UDP traffic by executable, with separate download/upload totals, a ranked list, and stacked charts. Choose a date and **Day** or **Month**, filter peak/off-peak traffic, and select an app to see its chart. Day charts show hourly buckets; month charts show tracking days. App history starts when capture is enabled; older adapter totals cannot be assigned to apps retroactively.
-
-Choose **Enable app tracking** to start an optional elevated ETW collector. Windows may request administrator consent. The main UI retains its existing permissions; the helper only collects network-event metadata and sends byte totals through a restricted local pipe. It does not inspect packet contents or persist remote addresses. Stopping tracking drains available events, and the helper stops when the main process exits. Enable capture again after restarting NetPulse; no elevated service or automatic UAC prompt is installed.
-
-**Daily budgets** lets you start each tracking day at midnight, at peak start, or at a custom HH:MM time. Set separate daily peak/off-peak allowances in decimal GB; 0 disables a budget. These budgets cover captured app traffic across all interfaces, excluding loopback, and are separate from your monthly adapter-based plan. VPN encapsulation and local transfers can affect this scope. Both directions count. Display resets do not replenish a budget or erase app history.
-
-Forecasts use the recent five-minute average for the active time band, require at least 60 seconds of eligible capture, and project until the current band ends or the tracking day resets, whichever comes first. Idle time within that band remains in the average. A caution appears when the remaining allowance is projected to run out, and apps contributing at least 5% of the current rate are marked. These are warnings, not bandwidth caps or firewall rules. Missing capture, sleep, unknown processes, and changing workloads limit prediction accuracy; an event-loss indication disables the forecast for that capture session. Totals represent recorded traffic, not guaranteed complete billing usage.
-
-Per-app totals remain separate from adapter counters to avoid adding the same traffic twice. App identity uses the executable path and validates process lifetime against event time; unresolved processes stay explicitly grouped. Retransmit and copy events are excluded. Browser tabs sharing an executable are grouped together. Paths and byte counts remain in the local database and its backups.
-
-### Capture confidence and app details
-
-The Applications page reports the percentage of the elapsed selected range observed by the collector. Paused periods, sleep and missing heartbeats remain **unknown usage**, not zero. History collected before coverage recording was introduced has unknown coverage. Event loss is highlighted; affected session forecasts are disabled. Coverage is collector availability, not proof that Windows or your provider measured every byte.
-
-Select an application to see its daily/hourly trend, then choose **App details** for its executable path, selected-range total, today-so-far versus the previous full tracking day, and both days' capture coverage. Local executable icons are cached with a fixed limit; network paths and shell extensions are not loaded for decoration.
-
-**Forecast** shows remaining allowance from captured usage, the recent average, the sustainable average until the current period ends, and a projected exhaustion time. These estimates include upload and download. They cannot account for other devices or traffic while capture was disabled.
-
-### Optional alerts and history retention
-
-In **Daily budgets**, choose **Quiet notifications** to enable Windows notifications at 75%, 90%, projected exhaustion, and budget reached. Alerts are off by default, request no sound, respect Windows quiet time, and run with the settings window closed. There is a 15-minute cooldown per time band. Higher-severity alerts supersede lower ones; each level is claimed once per tracking day and band, persisted across restart. Windows may suppress delivery, and suppressed alerts are not retried. Changing a cap does not reset that day's alert claims.
-
-App history defaults to **Keep all history**. Optional 30/90/365-day retention keeps that many completed local tracking days plus the current day and permanently removes older app traffic and coverage after saving. It does not delete adapter totals, billing corrections or daily display resets. Back up history before reducing retention; switching back to unlimited cannot restore deleted records. Settings backups include this preference.
-
-Completed tracking days are cached in SQLite in small batches. Monthly charts use whole-day summaries; partial-day and changed-boundary queries retain minute-level precision. Late arrivals invalidate and rebuild the affected cache. Retention reuses freed database pages; it does not force an expensive file-shrinking operation during monitoring.
 
 ## Install and run
 
@@ -94,32 +219,47 @@ Enable **Taskbar > Start with Windows > On - at sign-in**, then save, to start q
 
 Only one instance runs at a time. A normal second launch opens the existing settings window.
 
-## Customization
+## Current settings reference
 
-| Page | Controls |
-| --- | --- |
-| Overview | Daily upload/download, speeds, cycle totals, next reset, CSV export |
-| Data plan | Typed HH:MM or half-hour presets, allowances, monthly reset day/time |
-| Taskbar | Position preference, fine offset, adapter, Windows startup |
-| Adjust usage | Provider-aligned cycle totals, cycle reset, daily-display reset |
-| Appearance | Theme, background, width, text size, display details, and taskbar or tray-only mode |
-| Applications | Day/month charts, app ranking/icons/details, coverage, period filters, optional collector, and forecast details |
-| Daily budgets | Midnight/peak/custom day start, daily allowances, quiet alerts, and app-history retention |
-| Manage | Export/restore settings, consistent history snapshots, open data folder, retry saving |
+These are the shipped defaults for a new profile, not a reading of your personal settings. Existing profiles keep their saved values. Times use Windows local time and daylight-saving rules. Data units are decimal: **1 GB = 1,000,000,000 bytes**; widget K/M/G suffixes mean KB/MB/GB, and `/s` means bytes per second.
 
-Both directions count toward the plan. Units are decimal: 1 GB = 1,000,000,000 bytes. K/M/G mean KB/MB/GB; `/s` identifies speed. Equal peak times mean all-day peak; overnight ranges work, zero allowance means unlimited, and reset days 29-31 clamp to shorter months. Scheduling follows Windows local time and daylight-saving rules.
+| Page / setting | Available values | New-profile default |
+| --- | --- | --- |
+| Data plan / Peak starts and Peak ends | `00:00`–`23:59`; presets or typed `HH:MM` | `08:00`–`00:00` |
+| Data plan / Peak allowance | 0–1,000,000 GB; 0 = unlimited | 100 GB |
+| Data plan / Off-peak allowance | 0–1,000,000 GB; 0 = unlimited | 100 GB |
+| Data plan / Monthly reset day | 1–31; clamped for shorter months | 1 |
+| Data plan / Reset time | `00:00`–`23:59` | `00:00` |
+| Daily budgets / Start a tracking day | Midnight, peak start, custom time | Midnight |
+| Daily budgets / Custom start time | `00:00`–`23:59`; enabled in custom mode | `00:00` |
+| Daily budgets / Daily peak budget | 0–1,000,000 GB; 0 = no budget | 0 |
+| Daily budgets / Daily off-peak budget | 0–1,000,000 GB; 0 = no budget | 0 |
+| Daily budgets / Budget alerts | Off, Quiet notifications | Off |
+| Daily budgets / App history retention | Keep all history, 30, 90, 365 days | Keep all history |
+| Taskbar / Position | Far left, center near free space, right beside tray | Right |
+| Taskbar / Fine offset | −5,000 to +5,000 logical pixels | 0 |
+| Taskbar / Network adapter | Automatic or an available/saved adapter | Automatic |
+| Taskbar / Start with Windows | Off, On - at sign-in | Off unless already registered |
+| Appearance / Theme | Follow Windows, Light, Dark | Follow Windows |
+| Appearance / Background | Solid, Transparent | Transparent |
+| Appearance / Widget width | 136–320 logical pixels; may expand to fit text | 136 |
+| Appearance / Text size | 10–16 logical pixels | 11 |
+| Appearance / Display | Live speeds only, speeds and today's totals | Speeds and today's totals |
+| Appearance / Run mode | Taskbar widget + tray, tray only | Taskbar widget + tray |
+| Applications / App tracking | Enable or stop the optional collector | Off at each launch |
+| Applications / View and Traffic | Day/Month; All traffic/Peak/Off-peak | Day; All traffic |
 
-Peak-hour changes affect future samples; history retains its original classification. Reset-schedule changes recompute the selected cycle. Daily-display resets persist until the next configured tracking day and do not change raw traffic or cycle adjustments. Ctrl-drag fine-tunes widget offset, subject to detected free space. Larger text can increase minimum width.
+**Overview**, **Adjust usage**, and **Manage** also provide immediate actions described above; they are not persistent display preferences. App-history date navigation and filters update the view without changing your data plan.
 
-## Tracking, backup, and lower-overhead mode
+## First-time setup
 
-Choose **Appearance > Run mode > Tray only**, then Save settings to stop embedded-widget work. A fresh tray-only launch does not initialize UI Automation; switching during a session pauses its worker and removes the widget. Network sampling and usage storage continue. Switching back resumes placement. Previously loaded system libraries can remain in memory until restart.
+1. Open settings from the widget or tray icon. In **Data plan**, enter your provider's peak hours, allowances, and monthly reset, then choose **Save settings**.
+2. In **Taskbar**, confirm the adapter and placement. Enable **Start with Windows** if wanted, then save.
+3. In **Appearance**, choose the theme, size, display details, and widget or tray-only mode, then save.
+4. For app-level analysis, open **Applications** and choose **Enable app tracking**. Accept the administrator prompt only if you want this optional feature.
+5. In **Daily budgets**, select the tracking-day start, enter daily allowances, and choose alert and retention preferences. Save, then return to **Applications** to review captured activity and forecasts.
 
-**Overview > Tracking details** shows the session start, monitored interface names, and whether today's display was reset. **Manage** exports saved settings or restores plan/appearance preferences; startup registration and traffic history remain unchanged. Missing/invalid imported fields use safe defaults; an unrecognized backup is rejected. Save or discard pending changes before backup/restore.
-
-History snapshots use SQLite's backup API, including committed WAL data, and atomically replace the destination after a successful backup. For recovery, exit NetPulse first, preserve the old data folder, then restore a known-good database. Do not replace or delete a live database. Retry saving after fixing space/permission problems. There is no destructive automatic repair.
-
-Mouse clicks suppress decorative focus boxes; keyboard navigation retains focus indicators. Unsaved changes are indicated and closing offers a discard confirmation. Validation feedback appears in the settings footer.
+For example, if peak time begins at `08:00` and you want a 2 GB peak budget each day, choose **Peak time starts** as the day boundary and enter `2` for the daily peak budget. The app will assess captured peak traffic against that budget; it will not automatically divide your monthly allowance or enforce a speed limit.
 
 ## Accuracy and compatibility limits
 
@@ -133,18 +273,17 @@ The build is unsigned. Windows 10, mixed-DPI, sign-in, Explorer-menu recovery, a
 
 ## Resource use
 
-Optional per-app tracking adds a helper process, ETW buffers, and bounded aggregation queues. The analytics view allocates its query buffers only when opened, releases them when settings close, and refreshes at most every five seconds. Earlier resource measurements below describe the older baseline, not this new feature.
+NetPulse uses native C11/Win32/GDI and SQLite rather than a browser engine or managed runtime. It samples network counters once per second, batches writes, reuses drawing buffers/fonts, and separates taskbar placement work from sampling. Analytics query buffers are allocated when needed and released when settings close; visible analytics refresh at most every five seconds.
 
+Optional app tracking adds a helper process, ETW buffers, and bounded queues. Tray-only mode avoids embedded-widget work. Background forecast queries run for enabled alerts; otherwise they are needed only when the relevant analytics UI is used.
 
-NetPulse has no browser engine or managed-runtime dependency. Sampling is independent of the placement worker. Explorer-scoped event hooks avoid callbacks from unrelated apps, container elements skip unnecessary property queries, and rendering reuses its buffer and fonts. SQLite commits in batches rather than every sample.
-
-The previous 1.1.0 background smoke sample measured **22.55 MiB working set**, **3.75 MiB private memory**, and **0.625% of one CPU core** over 30 seconds. Working set includes shared libraries; activity, drivers, layout, and open settings affect usage. These are observations, not guarantees. The original sub-10-MiB target is not met. Version 1.1.1 measured 0.364% of one CPU core, 22.36 MiB working set, and 3.34 MiB private memory in a 30-second run. The same-session baseline was also 0.365% CPU; sustained savings are not established. See [VALIDATION.md](VALIDATION.md).
+Memory and CPU depend on the selected mode, active applications, Windows libraries, and the metric being measured. Private memory, working set, and Task Manager's memory figure are not interchangeable, so a universal “under 10 MB” claim would be misleading. Historical baseline measurements and the 1.4.0 synthetic-history/live-capture results are recorded in [VALIDATION.md](VALIDATION.md); the collector test harness's figures are not measurements of the NetPulse UI itself.
 
 ## Local data and recovery
 
 Settings and `netpulse.db` live in `%LOCALAPPDATA%\NetPulse`, unless `--data-dir` is supplied. Adjacent `config.ini` provides first-launch defaults. CSV includes raw traffic and cycle corrections; daily-display resets do not rewrite exported traffic.
 
-SQLite commits every 60 seconds and on normal exit, settings changes, suspend, and shutdown notifications. Forced termination may lose the uncommitted interval. Failed commits retain samples for retry; the bounded backlog reserves two slots for a boundary-spanning sample. Close NetPulse before backing up its database, or retain the WAL/SHM files together with it.
+SQLite commits every 60 seconds and on normal exit, settings changes, suspend, and shutdown notifications. Forced termination may lose the uncommitted interval. Failed commits retain samples for retry; the bounded backlog reserves two slots for a boundary-spanning sample. Use **Manage > Back up history...** for a live snapshot. For a manual file copy, exit NetPulse first; copying only a live database file can omit data still in its WAL. Never replace a database while NetPulse is running.
 
 ## Build, test, and package
 
@@ -158,16 +297,17 @@ python tests/test_sql.py
 .\tools\package.ps1 -Iscc "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 ```
 
-The build runs core, database, network, settings, placement, and ETW event-decoding tests. The separate startup integration test redirects the registry inside its own process and never modifies the real Run entry. The live counter test requires an active adapter. SQLite 3.53.4 source is included; `tools/fetch-sqlite.ps1` restores the checksum-pinned amalgamation if needed. CI includes Windows tests/packaging and portable core/SQL checks on Linux; that job does not build a Linux desktop app.
+The build runs core, database, large-history, network, settings, placement, and ETW event-decoding tests. The separate startup integration test redirects the registry inside its own process and never modifies the real Run entry. The live counter test requires an active adapter. SQLite 3.53.4 source is included; `tools/fetch-sqlite.ps1` restores the checksum-pinned amalgamation if needed. CI includes Windows tests/packaging and portable core/SQL checks on Linux; that job does not build a Linux desktop app.
 
 | Source | Responsibility |
 | --- | --- |
 | `core.c` | Schedules, counter deltas, exact byte allocation |
 | `network.c` | Windows counters and adapter selection |
-| `db.c` | Ledger, transactions, corrections, daily resets, export |
+| `db.c` | Ledger, transactions, corrections, daily resets, app history, coverage, alert claims, summaries, retention, and export |
+| `collector.c` | Optional elevated ETW collector and restricted local pipe |
 | `taskbar.c`, `placement.h` | Background layout discovery and gap selection |
-| `ui.c` | Widget rendering and native settings |
-| `settings.c`, `startup.c`, `main.c` | Configuration, startup registration, lifecycle |
+| `ui.c`, `analytics_ui.h` | Widget, native settings, app charts, details, and forecast presentation |
+| `settings.c`, `startup.c`, `main.c` | Configuration, startup registration, sampling, budget insights/notifications, and lifecycle |
 
 ## Contribute and distribute
 
@@ -179,4 +319,4 @@ NetPulse is **GPL-3.0-only**. Distribute matching source with binaries and prese
 
 Pushing a tag matching the installer version (for example `v1.4.0`) runs tests and creates a **draft** GitHub release with installer, portable ZIP, corresponding source, checksums, and generated notes. It does not publish automatically or provide code signing. Review [QA.md](QA.md) before publishing.
 
-For longer measurements, run `tools/measure-resources.ps1 -ProcessId <id> -Minutes 60 -OutputPath samples.csv`. The script only observes the selected NetPulse process. User-reported memory below 10 MB is plausible for a different memory metric/environment; it is not presented as a universal guarantee.
+For longer measurements, run `tools/measure-resources.ps1 -ProcessId <id> -Minutes 60 -OutputPath samples.csv`. Add `-IncludeCollector` to include its collector child. The script observes resources without starting, stopping, or changing the monitor; it also accepts the live `test_capture` harness. See [QA.md](QA.md) for the sustained-capture procedure and longer acceptance checks.
