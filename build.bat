@@ -38,9 +38,9 @@ cl %COMMON% tests\test_settings.c src\settings.c src\core.c /Fobuild\ /Febuild\t
 if errorlevel 1 exit /b 1
 cl %COMMON% tests\test_placement.c /Fobuild\ /Febuild\test_placement.exe
 if errorlevel 1 exit /b 1
-cl %COMMON% tests\test_capture.c src\collector.c /Fobuild\ /Febuild\test_capture.exe /link advapi32.lib shell32.lib ole32.lib winhttp.lib
+cl %COMMON% tests\test_capture.c src\collector.c /Fobuild\ /Febuild\test_capture.exe /link advapi32.lib shell32.lib ole32.lib winhttp.lib user32.lib
 if errorlevel 1 exit /b 1
-cl %COMMON% tests\test_etw.c /Fobuild\ /Febuild\test_etw.exe /link advapi32.lib shell32.lib ole32.lib
+cl %COMMON% tests\test_etw.c /Fobuild\ /Febuild\test_etw.exe /link advapi32.lib shell32.lib ole32.lib user32.lib
 if errorlevel 1 exit /b 1
 goto test
 :llvm
